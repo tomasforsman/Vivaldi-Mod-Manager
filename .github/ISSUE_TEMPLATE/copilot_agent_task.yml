@@ -1,0 +1,104 @@
+name: 🤖 Copilot Agent Task
+description: Structured template for Copilot Agent work requests
+title: "[Copilot Agent]: "
+labels: ["copilot-agent", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🤖 Copilot Agent Task Template
+        
+        Use this template when requesting work from GitHub Copilot Agent. This structured format helps ensure the agent has all necessary context and guidance to complete your task effectively.
+        
+        **Tip**: Be specific about your requirements and provide as much context as possible for better results.
+
+  - type: textarea
+    id: task-description
+    attributes:
+      label: Task Description
+      description: Clearly describe what you want the Copilot Agent to accomplish
+      placeholder: |
+        Example: "Implement a new feature to validate mod checksums before installation"
+        
+        Be specific about:
+        - What needs to be done
+        - Which files/areas of code are involved
+        - Any specific requirements or constraints
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-outcome
+    attributes:
+      label: Expected Outcome
+      description: Describe what the completed task should achieve
+      placeholder: |
+        Example: "After completion, the application should..."
+        - Validate mod file integrity before installation
+        - Display appropriate error messages for corrupted files
+        - Log validation results for debugging
+    validations:
+      required: true
+
+  - type: textarea
+    id: relevant-context
+    attributes:
+      label: Relevant Context
+      description: Provide any additional context, screenshots, file references, or related issues
+      placeholder: |
+        Include:
+        - Screenshots (drag & drop images here)
+        - Relevant file paths or code sections
+        - Related issues: #123, #456
+        - External references or documentation
+        - Current behavior vs desired behavior
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority/Urgency
+      description: How urgent is this task?
+      options:
+        - Low - No rush, can be done when convenient
+        - Medium - Normal priority, part of planned work
+        - High - Important for upcoming milestone
+        - Critical - Blocking other work or urgent fix needed
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints and Guidelines
+      description: Any specific constraints, coding standards, or guidelines the agent should follow
+      placeholder: |
+        Examples:
+        - Follow existing code patterns in the VivaldiModManager.Core namespace
+        - Ensure backward compatibility with existing configurations
+        - Add appropriate unit tests using xUnit framework
+        - Update documentation if user-facing changes are made
+        - Follow the project's C# coding standards (.editorconfig)
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm you've prepared this request properly
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have provided clear task description and expected outcome
+          required: true
+        - label: I have included relevant context and examples where applicable
+          required: false
+        - label: I have specified any important constraints or guidelines
+          required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
