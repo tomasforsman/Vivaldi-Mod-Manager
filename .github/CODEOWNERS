@@ -1,0 +1,32 @@
+# Code Owners for Vivaldi Mod Manager
+# This file defines individuals or teams that are responsible for code in this repository.
+# Order is important; the last matching pattern takes the most precedence.
+
+# Global owners - these users/teams will be requested for review on all changes
+* @tomasforsman
+
+# Core application code
+*.cs @tomasforsman
+*.csproj @tomasforsman
+*.sln @tomasforsman
+
+# Configuration files
+*.json @tomasforsman
+*.xml @tomasforsman
+*.config @tomasforsman
+
+# Documentation
+*.md @tomasforsman
+docs/ @tomasforsman
+
+# CI/CD and GitHub configuration
+.github/ @tomasforsman
+*.yml @tomasforsman
+*.yaml @tomasforsman
+
+# JavaScript/loader files
+*.js @tomasforsman
+
+# Security and licensing
+LICENSE @tomasforsman
+SECURITY.md @tomasforsman
