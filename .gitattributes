@@ -1,0 +1,80 @@
+# Set default behavior to automatically normalize line endings
+* text=auto
+
+# Explicitly declare text files you want to always be normalized and converted to native line endings on checkout
+*.cs text diff=csharp
+*.csx text diff=csharp
+*.vb text
+*.vbx text
+*.fs text
+*.fsx text
+*.fsi text
+*.ml text
+*.mli text
+*.xaml text
+*.xml text
+*.config text
+*.props text
+*.targets text
+*.ruleset text
+*.stylecop text
+*.json text
+*.js text
+*.ts text
+*.html text
+*.htm text
+*.css text
+*.scss text
+*.less text
+*.md text
+*.txt text
+*.yml text
+*.yaml text
+*.sh text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Declare files that will always have CRLF line endings on checkout
+*.sln text eol=crlf
+*.csproj text eol=crlf
+*.vbproj text eol=crlf
+*.vcxproj text eol=crlf
+*.vcxproj.filters text eol=crlf
+*.proj text eol=crlf
+*.projitems text eol=crlf
+*.shproj text eol=crlf
+
+# Denote all files that are truly binary and should not be modified
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.bmp binary
+*.tiff binary
+*.tif binary
+*.pdf binary
+*.doc binary
+*.docx binary
+*.xls binary
+*.xlsx binary
+*.ppt binary
+*.pptx binary
+*.zip binary
+*.rar binary
+*.7z binary
+*.tar binary
+*.gz binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.lib binary
+*.a binary
+*.pdb binary
+*.exp binary
+*.cache binary
+*.tlb binary
+*.snk binary
+*.pfx binary

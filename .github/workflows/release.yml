@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+    
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build Release
+      run: dotnet build --no-restore --configuration Release
+      
+    - name: Test
+      run: dotnet test --no-build --configuration Release --verbosity normal
+      
+    - name: Publish Application
+      run: dotnet publish --no-build --configuration Release --output ./publish
+      
+    - name: Create Release Archive
+      run: |
+        Compress-Archive -Path ./publish/* -DestinationPath vivaldi-mod-manager-${{ github.ref_name }}.zip
+      shell: pwsh
+      
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          vivaldi-mod-manager-${{ github.ref_name }}.zip
+        generate_release_notes: true
+        draft: false
+        prerelease: ${{ contains(github.ref_name, '-') }}
