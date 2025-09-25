@@ -235,8 +235,12 @@ public class HashServiceTests : IDisposable
         cts.Cancel();
 
         // Act & Assert
-        await Assert.ThrowsAsync<OperationCanceledException>(() => 
+        // TaskCanceledException inherits from OperationCanceledException
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => 
             _hashService.ComputeFileHashAsync(filePath, cts.Token));
+        
+        // Verify it's the expected cancellation behavior
+        exception.Should().BeOfType<TaskCanceledException>();
     }
 
     [Fact]
