@@ -89,4 +89,19 @@ public static class ManifestConstants
     /// Backup file suffix for loader files.
     /// </summary>
     public const string LoaderBackupSuffix = ".backup";
+
+    /// <summary>
+    /// Backup file suffix for injection target files.
+    /// </summary>
+    public const string InjectionBackupSuffix = ".vivaldi-mod-manager.backup";
+
+    /// <summary>
+    /// Comment marker for Vivaldi Mod Manager injection stubs.
+    /// </summary>
+    public const string InjectionCommentMarker = "Vivaldi Mod Manager - Injection Stub";
+
+    /// <summary>
+    /// Version identifier for injection stubs.
+    /// </summary>
+    public const string InjectionStubVersion = "1.0";
 }
