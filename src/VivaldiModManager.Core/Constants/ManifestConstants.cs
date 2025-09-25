@@ -79,4 +79,14 @@ public static class ManifestConstants
     /// Default timeout for file operations in milliseconds.
     /// </summary>
     public const int DefaultFileOperationTimeoutMs = 5000;
+
+    /// <summary>
+    /// Default version for generated loader configurations.
+    /// </summary>
+    public const string DefaultLoaderVersion = "1.0.0";
+
+    /// <summary>
+    /// Backup file suffix for loader files.
+    /// </summary>
+    public const string LoaderBackupSuffix = ".backup";
 }
