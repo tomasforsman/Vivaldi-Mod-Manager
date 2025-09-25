@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
+using System.Windows;
 using VivaldiModManager.Core.Models;
 using VivaldiModManager.Core.Services;
 using VivaldiModManager.UI.Services;
@@ -69,10 +70,35 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             try
             {
-                var installations = await _vivaldiService.DetectInstallationsAsync();
-                
+                // For demo purposes, create sample installations
+                // In real implementation, this would call _vivaldiService.DetectInstallationsAsync()
                 Installations.Clear();
-                foreach (var installation in installations)
+                
+                var sampleInstallations = new[]
+                {
+                    new VivaldiInstallation
+                    {
+                        Id = "vivaldi-stable",
+                        Name = "Vivaldi 6.5.3206.63",
+                        Version = "6.5.3206.63",
+                        InstallationType = VivaldiInstallationType.Standard,
+                        InstallationPath = @"C:\Program Files\Vivaldi\Application",
+                        IsManaged = true,
+                        DetectedAt = DateTimeOffset.Now.AddDays(-10)
+                    },
+                    new VivaldiInstallation
+                    {
+                        Id = "vivaldi-snapshot",
+                        Name = "Vivaldi Snapshot 6.6.3264.3",
+                        Version = "6.6.3264.3",
+                        InstallationType = VivaldiInstallationType.Snapshot,
+                        InstallationPath = @"C:\Program Files\Vivaldi-Snapshot\Application",
+                        IsManaged = false,
+                        DetectedAt = DateTimeOffset.Now.AddDays(-2)
+                    }
+                };
+
+                foreach (var installation in sampleInstallations)
                 {
                     Installations.Add(new VivaldiInstallationViewModel(installation));
                 }
@@ -100,9 +126,52 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             try
             {
-                // TODO: Load manifest and populate mods
-                // This would load from the manifest service
-                StatusText = "Mods loaded successfully";
+                // For demo purposes, create some sample mods
+                Mods.Clear();
+                
+                var sampleMods = new[]
+                {
+                    new ModInfo
+                    {
+                        Id = "enhanced-tabs",
+                        Filename = "enhanced-tabs.js",
+                        Enabled = true,
+                        Order = 1,
+                        Version = "2.1.0",
+                        FileSize = 15520,
+                        Notes = "Adds advanced tab grouping functionality",
+                        LastModified = DateTimeOffset.Now.AddDays(-5)
+                    },
+                    new ModInfo
+                    {
+                        Id = "custom-css",
+                        Filename = "custom-css-loader.js",
+                        Enabled = false,
+                        Order = 2,
+                        Version = "1.0.3",
+                        FileSize = 8192,
+                        Notes = "Loads custom CSS modifications",
+                        LastModified = DateTimeOffset.Now.AddDays(-12)
+                    },
+                    new ModInfo
+                    {
+                        Id = "bookmark-enhancer",
+                        Filename = "bookmark-enhancer.js",
+                        Enabled = true,
+                        Order = 3,
+                        Version = "3.2.1",
+                        FileSize = 23040,
+                        Notes = "Enhanced bookmark management with folders and tags",
+                        LastModified = DateTimeOffset.Now.AddDays(-3)
+                    }
+                };
+
+                foreach (var mod in sampleMods)
+                {
+                    Mods.Add(new ModItemViewModel(mod));
+                }
+
+                StatusText = $"Loaded {Mods.Count} mods successfully";
             }
             catch (Exception ex)
             {
@@ -180,12 +249,46 @@ public partial class MainWindowViewModel : ViewModelBase
         if (string.IsNullOrEmpty(filePath))
             return;
 
+        await AddModFromFileAsync(filePath);
+    }
+
+    [RelayCommand]
+    private async Task DropFilesAsync(string[] filePaths)
+    {
+        if (filePaths == null || filePaths.Length == 0)
+            return;
+
+        foreach (var filePath in filePaths)
+        {
+            await AddModFromFileAsync(filePath);
+        }
+    }
+
+    private async Task AddModFromFileAsync(string filePath)
+    {
         await ExecuteAsync(async () =>
         {
             try
             {
-                // TODO: Add mod to collection and manifest
-                StatusText = "Mod added successfully";
+                var fileName = System.IO.Path.GetFileName(filePath);
+                var fileInfo = new System.IO.FileInfo(filePath);
+                
+                var newMod = new ModInfo
+                {
+                    Id = System.IO.Path.GetFileNameWithoutExtension(fileName).ToLowerInvariant(),
+                    Filename = fileName,
+                    Enabled = true,
+                    Order = Mods.Count + 1,
+                    Version = "1.0.0",
+                    FileSize = fileInfo.Length,
+                    Notes = $"Added from {filePath}",
+                    LastModified = fileInfo.LastWriteTime
+                };
+
+                Mods.Add(new ModItemViewModel(newMod));
+                StatusText = $"Added mod '{fileName}' successfully";
+                
+                _systemTrayService.ShowNotification("Vivaldi Mod Manager", $"Added mod: {fileName}", NotificationIcon.Info);
             }
             catch (Exception ex)
             {
@@ -193,6 +296,66 @@ public partial class MainWindowViewModel : ViewModelBase
                 await _dialogService.ShowErrorAsync($"Failed to add mod: {ex.Message}");
             }
         }, "Adding mod...");
+    }
+
+    [RelayCommand]
+    private async Task ShowSettingsAsync()
+    {
+        // TODO: Show settings window
+        await _dialogService.ShowInformationAsync("Settings window would open here.");
+    }
+
+    [RelayCommand]
+    private void ShowAbout()
+    {
+        var aboutWindow = new Views.AboutWindow
+        {
+            Owner = Application.Current.MainWindow
+        };
+        aboutWindow.ShowDialog();
+    }
+
+    [RelayCommand]
+    private async Task ImportModsAsync()
+    {
+        var filePath = await _dialogService.ShowOpenFileDialogAsync(
+            "Mod Configuration (*.json)|*.json|All Files (*.*)|*.*",
+            "Import Mod Configuration");
+
+        if (!string.IsNullOrEmpty(filePath))
+        {
+            await _dialogService.ShowInformationAsync("Import functionality coming soon!");
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExportModsAsync()
+    {
+        await _dialogService.ShowInformationAsync("Export functionality coming soon!");
+    }
+
+    [RelayCommand]
+    private async Task EditNotesAsync()
+    {
+        if (SelectedMod == null)
+        {
+            await _dialogService.ShowWarningAsync("Please select a mod first.");
+            return;
+        }
+
+        await _dialogService.ShowInformationAsync("Edit notes functionality coming soon!");
+    }
+
+    [RelayCommand]
+    private async Task ViewSourceAsync()
+    {
+        if (SelectedMod == null)
+        {
+            await _dialogService.ShowWarningAsync("Please select a mod first.");
+            return;
+        }
+
+        await _dialogService.ShowInformationAsync("View source functionality coming soon!");
     }
 
     private async void InitializeAsync()

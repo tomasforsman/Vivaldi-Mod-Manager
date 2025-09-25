@@ -1,0 +1,70 @@
+<Window x:Class="VivaldiModManager.UI.Views.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="About Vivaldi Mod Manager" 
+        Height="400" Width="500"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{StaticResource BackgroundBrush}">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,20">
+            <TextBlock Text="Vivaldi Mod Manager" Style="{StaticResource HeadingTextStyle}" HorizontalAlignment="Center"/>
+            <TextBlock Text="Version 1.3.0" Style="{StaticResource SubheadingTextStyle}" HorizontalAlignment="Center"/>
+        </StackPanel>
+
+        <!-- Content -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Style="{StaticResource ModernCardStyle}" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="Description" Style="{StaticResource SubheadingTextStyle}"/>
+                        <TextBlock Style="{StaticResource BodyTextStyle}">
+                            <Run Text="Vivaldi Mod Manager is a powerful Windows application that lets you install, enable, and manage custom JavaScript modifications for the Vivaldi browser."/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource ModernCardStyle}" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="Features" Style="{StaticResource SubheadingTextStyle}"/>
+                        <TextBlock Style="{StaticResource BodyTextStyle}">
+                            • Centralized mod management<LineBreak/>
+                            • Automatic update handling<LineBreak/>
+                            • Safe Mode for troubleshooting<LineBreak/>
+                            • Backup and recovery<LineBreak/>
+                            • Real-time monitoring<LineBreak/>
+                            • System tray integration
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource ModernCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="Copyright" Style="{StaticResource SubheadingTextStyle}"/>
+                        <TextBlock Text="Copyright © 2024 Tomas Forsman" Style="{StaticResource BodyTextStyle}"/>
+                        <TextBlock Text="Licensed under the MIT License" Style="{StaticResource CaptionTextStyle}"/>
+                        <TextBlock Margin="0,8,0,0" Style="{StaticResource CaptionTextStyle}">
+                            <Run Text="This project is not affiliated with or endorsed by Vivaldi Technologies."/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Close Button -->
+        <Button Grid.Row="2" Content="Close" 
+                Click="Close_Click"
+                Style="{StaticResource ModernButtonStyle}"
+                HorizontalAlignment="Center"
+                Width="100"
+                Margin="0,20,0,0"/>
+    </Grid>
+</Window>

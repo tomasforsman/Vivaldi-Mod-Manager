@@ -45,9 +45,9 @@ public partial class SettingsWindowViewModel : ViewModelBase
             try
             {
                 // Apply theme if changed
-                if (_selectedTheme != _themeService.CurrentTheme)
+                if (SelectedTheme != _themeService.CurrentTheme)
                 {
-                    _themeService.ApplyTheme(_selectedTheme);
+                    _themeService.ApplyTheme(SelectedTheme);
                 }
 
                 // TODO: Save other settings to configuration
