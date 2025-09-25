@@ -372,7 +372,7 @@ public class InjectionService : IInjectionService
             {
                 status.ValidationStatus = InjectionValidationStatus.Partial;
             }
-            else if (validationErrors.Any(e => e.Contains("fingerprint")))
+            else if (status.TargetFiles.Values.Any(t => t.ValidationStatus == InjectionValidationStatus.FingerprintMismatch))
             {
                 status.ValidationStatus = InjectionValidationStatus.FingerprintMismatch;
             }
