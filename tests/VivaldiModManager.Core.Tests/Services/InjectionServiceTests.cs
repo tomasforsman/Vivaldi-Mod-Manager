@@ -525,6 +525,57 @@ public class InjectionServiceTests : IDisposable
     }
 
     /// <summary>
+    /// Tests that generated injection stubs include CSP integrity hashes.
+    /// </summary>
+    [Fact]
+    public async Task InjectAsync_GeneratesStubWithIntegrityHash()
+    {
+        // Arrange
+        var installation = CreateTestInstallation();
+        var loaderPath = Path.Combine(_tempDirectory, "vivaldi-mods", "loader.js");
+        var windowHtmlPath = Path.Combine(_tempDirectory, "window.html");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(loaderPath)!);
+        await File.WriteAllTextAsync(loaderPath, "// loader content");
+        await File.WriteAllTextAsync(windowHtmlPath, "<html><head></head><body></body></html>");
+
+        var targets = new Dictionary<string, string>
+        {
+            ["window.html"] = windowHtmlPath
+        }.AsReadOnly();
+
+        _vivaldiServiceMock
+            .Setup(v => v.FindInjectionTargetsAsync(installation, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(targets);
+
+        _hashServiceMock
+            .Setup(h => h.ComputeStringHash(It.IsAny<string>()))
+            .Returns("abcd1234567890ef");
+
+        _loaderServiceMock
+            .Setup(l => l.GenerateLoaderAsync(It.IsAny<ManifestData>(), loaderPath, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new LoaderConfiguration());
+
+        // Act
+        await _injectionService.InjectAsync(installation, loaderPath);
+
+        // Assert
+        var htmlContent = await File.ReadAllTextAsync(windowHtmlPath);
+        
+        // Verify the script tag includes integrity attribute
+        htmlContent.Should().Contain("integrity=\"sha256-");
+        htmlContent.Should().Contain("<script type=\"module\" integrity=\"sha256-");
+        
+        // Verify it contains the expected script structure
+        htmlContent.Should().Contain("Vivaldi Mod Manager - Injection Stub");
+        htmlContent.Should().Contain("await import(loaderPath);");
+        
+        installation.LastInjectionAt.Should().NotBeNull();
+        installation.InjectionFingerprint.Should().Be("abcd1234567890ef");
+        installation.LastInjectionStatus.Should().Be("Success");
+    }
+
+    /// <summary>
     /// Creates a test installation for testing purposes.
     /// </summary>
     /// <returns>A test VivaldiInstallation instance.</returns>

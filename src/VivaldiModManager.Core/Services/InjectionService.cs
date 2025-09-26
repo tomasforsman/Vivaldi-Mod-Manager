@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
@@ -452,8 +453,8 @@ public class InjectionService : IInjectionService
         var timestamp = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
         var relativeLoaderPath = Path.GetFileName(Path.GetDirectoryName(loaderPath)) + "/" + Path.GetFileName(loaderPath);
         
-        return $@"<script type=""module"">
-/* {ManifestConstants.InjectionCommentMarker} v{ManifestConstants.InjectionStubVersion} */
+        // Generate the script content without the script tags
+        var scriptContent = $@"/* {ManifestConstants.InjectionCommentMarker} v{ManifestConstants.InjectionStubVersion} */
 /* Fingerprint: {fingerprint} */
 /* Generated: {timestamp} */
 (async function() {{
@@ -464,7 +465,17 @@ public class InjectionService : IInjectionService
   }} catch (error) {{
     console.error('Vivaldi Mod Manager: Failed to load mods:', error);
   }}
-}})();
+}})();";
+
+        // Compute SHA256 hash for CSP integrity
+        var contentBytes = Encoding.UTF8.GetBytes(scriptContent);
+        using var sha256 = SHA256.Create();
+        var hashBytes = sha256.ComputeHash(contentBytes);
+        var base64Hash = Convert.ToBase64String(hashBytes);
+        
+        // Return script with integrity attribute for CSP compliance
+        return $@"<script type=""module"" integrity=""sha256-{base64Hash}"">
+{scriptContent}
 </script>";
     }
 
