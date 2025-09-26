@@ -706,9 +706,11 @@ public class InjectionService : IInjectionService
         try
         {
             // Copy backup content to temp file
-            using var backupStream = new FileStream(backupPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            using var tempStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write);
-            await backupStream.CopyToAsync(tempStream, cancellationToken);
+            using (var backupStream = new FileStream(backupPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var tempStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+            {
+                await backupStream.CopyToAsync(tempStream, cancellationToken);
+            } // Ensure streams are disposed before file move
 
             // Atomic move to target location
             File.Move(tempPath, targetPath, overwrite: true);
