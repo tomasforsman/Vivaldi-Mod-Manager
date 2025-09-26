@@ -50,7 +50,8 @@ public partial class MainWindowViewModel : ViewModelBase
         ILoaderService loaderService,
         IDialogService dialogService,
         ISystemTrayService systemTrayService,
-        ILogger<MainWindowViewModel> logger)
+        ILogger<MainWindowViewModel> logger,
+        bool autoInitialize = true)
     {
         _vivaldiService = vivaldiService ?? throw new ArgumentNullException(nameof(vivaldiService));
         _injectionService = injectionService ?? throw new ArgumentNullException(nameof(injectionService));
@@ -60,7 +61,10 @@ public partial class MainWindowViewModel : ViewModelBase
         _systemTrayService = systemTrayService ?? throw new ArgumentNullException(nameof(systemTrayService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        InitializeAsync();
+        if (autoInitialize)
+        {
+            InitializeAsync();
+        }
     }
 
     [RelayCommand]

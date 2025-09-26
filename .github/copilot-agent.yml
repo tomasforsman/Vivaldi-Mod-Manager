@@ -1,0 +1,33 @@
+# GitHub Copilot Agent Configuration
+# This file helps configure GitHub Copilot agent behavior for this repository
+
+# Enable GitHub Copilot agent features
+enabled: true
+
+# Permissions for GitHub Copilot agent
+permissions:
+  # Allow agent to read repository contents
+  contents: read
+  # Allow agent to write to pull requests and issues
+  pull_requests: write
+  issues: write
+  # Allow agent to read actions and workflow runs
+  actions: read
+  # Allow agent to read repository metadata
+  metadata: read
+
+# Events that should trigger agent responses
+events:
+  - pull_request
+  - pull_request_review
+  - issue_comment
+  - pull_request_review_comment
+
+# Agent behavior settings
+agent:
+  # Respond to mentions and requests
+  auto_respond: true
+  # Handle code review requests
+  code_review: true
+  # Process task requests
+  task_processing: true
