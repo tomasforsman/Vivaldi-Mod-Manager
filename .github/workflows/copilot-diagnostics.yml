@@ -1,0 +1,54 @@
+name: Copilot Agent Diagnostics
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0'  # Run weekly on Sundays
+
+jobs:
+  diagnostics:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      metadata: read
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+      
+    - name: Check GitHub Copilot Agent Configuration
+      run: |
+        echo "=== GitHub Copilot Agent Diagnostics ==="
+        echo "Repository: ${{ github.repository }}"
+        echo "Event: ${{ github.event_name }}"
+        echo "Ref: ${{ github.ref }}"
+        echo ""
+        
+        echo "=== Workflow Files ==="
+        find .github/workflows -name "*.yml" -o -name "*.yaml" | while read file; do
+          echo "Found workflow: $file"
+        done
+        echo ""
+        
+        echo "=== GitHub Configuration Files ==="
+        find .github -name "*.yml" -o -name "*.yaml" -o -name "*.json" | grep -v workflows | while read file; do
+          echo "Found config: $file"
+        done
+        echo ""
+        
+        echo "=== Issue Templates ==="
+        find .github/ISSUE_TEMPLATE -name "*.yml" -o -name "*.yaml" -o -name "*.md" 2>/dev/null | while read file; do
+          echo "Found template: $file"
+        done
+        
+        echo ""
+        echo "=== Pull Request Template ==="
+        if [ -f ".github/pull_request_template.md" ]; then
+          echo "Found PR template: .github/pull_request_template.md"
+        else
+          echo "No PR template found"
+        fi
+        
+        echo ""
+        echo "=== Diagnostics Complete ==="
