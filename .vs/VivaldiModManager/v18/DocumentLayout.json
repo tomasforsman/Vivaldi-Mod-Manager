@@ -1,0 +1,76 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Code\\Vivaldi-Mod-Manager\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\tomas\\AppData\\Local\\Temp\\.vsdbgsrc\\aad6be2495d0a786b94b3514a5b6903407fe2d6a75ad7e505df6a9d895927867\\XamlReader.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\tomas\\AppData\\Local\\Temp\\.vsdbgsrc\\7ddde0d79a6f4b7bfa125b77c73e5d75bbb61980bf3a4f5ef5499fe5c41a9ed7\\DefaultBinder.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8F2E8B8C-9D4C-4F5E-A1B2-6C3D7A8E9F0A}|src\\VivaldiModManager.UI\\VivaldiModManager.UI.csproj|c:\\code\\vivaldi-mod-manager\\src\\vivaldimodmanager.ui\\views\\mainwindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}",
+      "RelativeMoniker": "D:0:0:{8F2E8B8C-9D4C-4F5E-A1B2-6C3D7A8E9F0A}|src\\VivaldiModManager.UI\\VivaldiModManager.UI.csproj|solutionrelative:src\\vivaldimodmanager.ui\\views\\mainwindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 1,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{cce594b6-0c39-4442-ba28-10c64ac7e89f}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "XamlReader.cs",
+              "DocumentMoniker": "C:\\Users\\tomas\\AppData\\Local\\Temp\\.vsdbgsrc\\aad6be2495d0a786b94b3514a5b6903407fe2d6a75ad7e505df6a9d895927867\\XamlReader.cs",
+              "RelativeDocumentMoniker": "..\\..\\Users\\tomas\\AppData\\Local\\Temp\\.vsdbgsrc\\aad6be2495d0a786b94b3514a5b6903407fe2d6a75ad7e505df6a9d895927867\\XamlReader.cs",
+              "ToolTip": "C:\\Users\\tomas\\AppData\\Local\\Temp\\.vsdbgsrc\\aad6be2495d0a786b94b3514a5b6903407fe2d6a75ad7e505df6a9d895927867\\XamlReader.cs",
+              "RelativeToolTip": "..\\..\\Users\\tomas\\AppData\\Local\\Temp\\.vsdbgsrc\\aad6be2495d0a786b94b3514a5b6903407fe2d6a75ad7e505df6a9d895927867\\XamlReader.cs",
+              "ViewState": "AgIAALYBAAAAAAAAAAAAALUBAAACAAAAAQAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-09-26T19:55:48.759Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "DefaultBinder.cs",
+              "DocumentMoniker": "C:\\Users\\tomas\\AppData\\Local\\Temp\\.vsdbgsrc\\7ddde0d79a6f4b7bfa125b77c73e5d75bbb61980bf3a4f5ef5499fe5c41a9ed7\\DefaultBinder.cs",
+              "RelativeDocumentMoniker": "..\\..\\Users\\tomas\\AppData\\Local\\Temp\\.vsdbgsrc\\7ddde0d79a6f4b7bfa125b77c73e5d75bbb61980bf3a4f5ef5499fe5c41a9ed7\\DefaultBinder.cs",
+              "ToolTip": "C:\\Users\\tomas\\AppData\\Local\\Temp\\.vsdbgsrc\\7ddde0d79a6f4b7bfa125b77c73e5d75bbb61980bf3a4f5ef5499fe5c41a9ed7\\DefaultBinder.cs [Read Only]",
+              "RelativeToolTip": "..\\..\\Users\\tomas\\AppData\\Local\\Temp\\.vsdbgsrc\\7ddde0d79a6f4b7bfa125b77c73e5d75bbb61980bf3a4f5ef5499fe5c41a9ed7\\DefaultBinder.cs [Read Only]",
+              "ViewState": "AgIAAEAAAAAAAAAAAAAIwFEAAAADAAAAAQAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-09-26T19:43:07.318Z",
+              "EditorCaption": " [Read Only]"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "MainWindow.xaml",
+              "DocumentMoniker": "C:\\Code\\Vivaldi-Mod-Manager\\src\\VivaldiModManager.UI\\Views\\MainWindow.xaml",
+              "RelativeDocumentMoniker": "src\\VivaldiModManager.UI\\Views\\MainWindow.xaml",
+              "ToolTip": "C:\\Code\\Vivaldi-Mod-Manager\\src\\VivaldiModManager.UI\\Views\\MainWindow.xaml",
+              "RelativeToolTip": "src\\VivaldiModManager.UI\\Views\\MainWindow.xaml",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
+              "WhenOpened": "2025-09-26T19:42:30.671Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{aa2115a1-9712-457b-9047-dbb71ca2cdd2}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

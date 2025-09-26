@@ -12,10 +12,6 @@
         behaviors:DropFileBehavior.AllowedExtensions=".js"
         >
 
-    <Window.DataContext>
-        <vm:MainWindowViewModel/>
-    </Window.DataContext>
-
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>

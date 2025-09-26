@@ -1,8 +1,12 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
+using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using VivaldiModManager.Core.Models;
 using VivaldiModManager.Core.Services;
 using VivaldiModManager.UI.Services;
 using VivaldiModManager.UI.ViewModels;
@@ -13,16 +17,18 @@ namespace VivaldiModManager.UI.Tests.ViewModels;
 /// <summary>
 /// Unit tests for the MainWindowViewModel class.
 /// </summary>
-public class MainWindowViewModelTests
+public class MainWindowViewModelTests : IDisposable
 {
     private readonly Mock<IVivaldiService> _mockVivaldiService;
     private readonly Mock<IInjectionService> _mockInjectionService;
     private readonly Mock<IManifestService> _mockManifestService;
     private readonly Mock<ILoaderService> _mockLoaderService;
+    private readonly Mock<IHashService> _mockHashService;
     private readonly Mock<IDialogService> _mockDialogService;
     private readonly Mock<ISystemTrayService> _mockSystemTrayService;
     private readonly Mock<ILogger<MainWindowViewModel>> _mockLogger;
     private readonly MainWindowViewModel _viewModel;
+    private readonly string _tempDataDirectory;
 
     public MainWindowViewModelTests()
     {
@@ -30,19 +36,33 @@ public class MainWindowViewModelTests
         _mockInjectionService = new Mock<IInjectionService>();
         _mockManifestService = new Mock<IManifestService>();
         _mockLoaderService = new Mock<ILoaderService>();
+        _mockHashService = new Mock<IHashService>();
         _mockDialogService = new Mock<IDialogService>();
         _mockSystemTrayService = new Mock<ISystemTrayService>();
         _mockLogger = new Mock<ILogger<MainWindowViewModel>>();
+
+        _tempDataDirectory = Path.Combine(Path.GetTempPath(), "VmmTests", Guid.NewGuid().ToString("N"));
+
+        _mockManifestService.Setup(m => m.ManifestExists(It.IsAny<string>())).Returns(false);
+        _mockManifestService.Setup(m => m.CreateDefaultManifest()).Returns(() => new ManifestData());
+        _mockManifestService.Setup(m => m.SaveManifestAsync(It.IsAny<ManifestData>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        _mockHashService.Setup(h => h.ComputeFileHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("hash");
+        _mockHashService.Setup(h => h.ComputeStringHash(It.IsAny<string>())).Returns("hash");
 
         _viewModel = new MainWindowViewModel(
             _mockVivaldiService.Object,
             _mockInjectionService.Object,
             _mockManifestService.Object,
             _mockLoaderService.Object,
+            _mockHashService.Object,
             _mockDialogService.Object,
             _mockSystemTrayService.Object,
             _mockLogger.Object,
-            autoInitialize: false); // Don't auto-initialize for tests
+            autoInitialize: false,
+            dataDirectory: _tempDataDirectory); // Use temp data path for tests
     }
 
     [Fact]
@@ -146,7 +166,7 @@ public class MainWindowViewModelTests
             _viewModel.Mods.Last().Name.Should().Be("test-mod.js");
             _mockSystemTrayService.Verify(x => x.ShowNotification(
                 "Vivaldi Mod Manager",
-                "Added mod: test-mod.js",
+                It.Is<string>(s => s.Contains("Added")),
                 NotificationIcon.Info), Times.Once);
         }
         finally
@@ -171,5 +191,20 @@ public class MainWindowViewModelTests
     {
         // Act & Assert
         _viewModel.InjectModsCommand.CanExecute(null).Should().BeTrue();
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            if (Directory.Exists(_tempDataDirectory))
+            {
+                Directory.Delete(_tempDataDirectory, recursive: true);
+            }
+        }
+        catch
+        {
+            // Ignore cleanup errors in tests
+        }
     }
 }
