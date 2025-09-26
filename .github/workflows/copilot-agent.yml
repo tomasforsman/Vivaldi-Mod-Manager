@@ -1,0 +1,32 @@
+name: GitHub Copilot Agent Support
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+
+jobs:
+  copilot-agent-support:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+      metadata: read
+      
+    steps:
+    - name: Support GitHub Copilot Agent
+      run: |
+        echo "GitHub Copilot Agent support workflow triggered"
+        echo "Event: ${{ github.event_name }}"
+        echo "Repository: ${{ github.repository }}"
+        echo "Pull Request: ${{ github.event.number }}"
+      
+    # This workflow enables GitHub Copilot agent to interact with pull requests
+    # by ensuring proper permissions and event triggers are in place

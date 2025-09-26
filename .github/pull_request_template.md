@@ -45,3 +45,11 @@ Please describe the tests that you ran to verify your changes. Provide instructi
 ## Additional Notes:
 
 <!-- Add any additional notes about the pull request here -->
+
+## GitHub Copilot Agent:
+
+<!-- If you need help from GitHub Copilot Agent, you can:
+- @mention copilot in comments to request assistance
+- Use the "Copilot Agent Task" issue template for structured requests
+- Ask for code reviews, testing help, or implementation guidance
+-->
