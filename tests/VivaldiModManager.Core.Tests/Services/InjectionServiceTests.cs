@@ -208,20 +208,10 @@ public class InjectionServiceTests : IDisposable
 
         // Create test files with injections
         var htmlWithInjection = @"<html><head></head><body>
-<script type=""module"">
-/* Vivaldi Mod Manager - Injection Stub v1.0 */
-/* Fingerprint: abcd1234 */
-/* Generated: 2025-01-21T10:30:00Z */
-(async function() {
-  try {
-    const loaderPath = './vivaldi-mods/loader.js';
-    await import(loaderPath);
-    console.log('Vivaldi Mod Manager: Mods loaded successfully');
-  } catch (error) {
-    console.error('Vivaldi Mod Manager: Failed to load mods:', error);
-  }
-})();
-</script>
+<!-- Vivaldi Mod Manager - Injection Stub v1.0 -->
+<!-- Fingerprint: abcd1234 -->
+<!-- Generated: 2025-01-21T10:30:00Z -->
+<script type=""module"" src=""./vivaldi-mods/loader.js""></script>
 </body></html>";
 
         await File.WriteAllTextAsync(windowHtmlPath, htmlWithInjection);
@@ -270,20 +260,10 @@ public class InjectionServiceTests : IDisposable
         
         var windowHtmlPath = Path.Combine(_tempDirectory, "window.html");
         var htmlWithValidInjection = @"<html><head></head><body>
-<script type=""module"">
-/* Vivaldi Mod Manager - Injection Stub v1.0 */
-/* Fingerprint: abcd1234 */
-/* Generated: 2025-01-21T10:30:00Z */
-(async function() {
-  try {
-    const loaderPath = './vivaldi-mods/loader.js';
-    await import(loaderPath);
-    console.log('Vivaldi Mod Manager: Mods loaded successfully');
-  } catch (error) {
-    console.error('Vivaldi Mod Manager: Failed to load mods:', error);
-  }
-})();
-</script>
+<!-- Vivaldi Mod Manager - Injection Stub v1.0 -->
+<!-- Fingerprint: abcd1234 -->
+<!-- Generated: 2025-01-21T10:30:00Z -->
+<script type=""module"" src=""./vivaldi-mods/loader.js""></script>
 </body></html>";
 
         await File.WriteAllTextAsync(windowHtmlPath, htmlWithValidInjection);
@@ -407,20 +387,10 @@ public class InjectionServiceTests : IDisposable
         
         var windowHtmlPath = Path.Combine(_tempDirectory, "window.html");
         var htmlWithValidInjection = @"<html><head></head><body>
-<script type=""module"">
-/* Vivaldi Mod Manager - Injection Stub v1.0 */
-/* Fingerprint: abcd1234 */
-/* Generated: 2025-01-21T10:30:00Z */
-(async function() {
-  try {
-    const loaderPath = './vivaldi-mods/loader.js';
-    await import(loaderPath);
-    console.log('Vivaldi Mod Manager: Mods loaded successfully');
-  } catch (error) {
-    console.error('Vivaldi Mod Manager: Failed to load mods:', error);
-  }
-})();
-</script>
+<!-- Vivaldi Mod Manager - Injection Stub v1.0 -->
+<!-- Fingerprint: abcd1234 -->
+<!-- Generated: 2025-01-21T10:30:00Z -->
+<script type=""module"" src=""./vivaldi-mods/loader.js""></script>
 </body></html>";
 
         await File.WriteAllTextAsync(windowHtmlPath, htmlWithValidInjection);
@@ -482,14 +452,10 @@ public class InjectionServiceTests : IDisposable
         await File.WriteAllTextAsync(loaderPath, "// loader content");
         
         var htmlWithBrokenInjection = @"<html><head></head><body>
-<script type=""module"">
-/* Vivaldi Mod Manager - Injection Stub v1.0 */
-/* Fingerprint: oldfingerprint */
-/* Generated: 2025-01-21T10:30:00Z */
-(async function() {
-  // broken content
-})();
-</script>
+<!-- Vivaldi Mod Manager - Injection Stub v1.0 -->
+<!-- Fingerprint: oldfingerprint -->
+<!-- Generated: 2025-01-21T10:30:00Z -->
+<script type=""module"" src=""./vivaldi-mods/loader.js""></script>
 </body></html>";
 
         await File.WriteAllTextAsync(windowHtmlPath, htmlWithBrokenInjection);
@@ -525,10 +491,10 @@ public class InjectionServiceTests : IDisposable
     }
 
     /// <summary>
-    /// Tests that generated injection stubs include CSP integrity hashes.
+    /// Tests that generated injection stubs use external script references to avoid CSP issues.
     /// </summary>
     [Fact]
-    public async Task InjectAsync_GeneratesStubWithIntegrityHash()
+    public async Task InjectAsync_GeneratesStubWithExternalScript()
     {
         // Arrange
         var installation = CreateTestInstallation();
@@ -562,13 +528,14 @@ public class InjectionServiceTests : IDisposable
         // Assert
         var htmlContent = await File.ReadAllTextAsync(windowHtmlPath);
         
-        // Verify the script tag includes integrity attribute
-        htmlContent.Should().Contain("integrity=\"sha256-");
-        htmlContent.Should().Contain("<script type=\"module\" integrity=\"sha256-");
+        // Verify the script tag uses external src reference (no inline content)
+        htmlContent.Should().Contain("<script type=\"module\" src=\"./vivaldi-mods/loader.js\"></script>");
+        htmlContent.Should().NotContain("integrity="); // No integrity hash needed for external scripts
+        htmlContent.Should().NotContain("await import"); // No inline JavaScript
         
-        // Verify it contains the expected script structure
-        htmlContent.Should().Contain("Vivaldi Mod Manager - Injection Stub");
-        htmlContent.Should().Contain("await import(loaderPath);");
+        // Verify it contains the expected comment structure
+        htmlContent.Should().Contain("<!-- Vivaldi Mod Manager - Injection Stub");
+        htmlContent.Should().Contain("<!-- Fingerprint:");
         
         installation.LastInjectionAt.Should().NotBeNull();
         installation.InjectionFingerprint.Should().Be("abcd1234567890ef");

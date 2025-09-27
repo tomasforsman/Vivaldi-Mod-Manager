@@ -1,5 +1,4 @@
 using System.Runtime.Versioning;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
@@ -22,11 +21,11 @@ public class InjectionService : IInjectionService
     private readonly IHashService _hashService;
 
     private static readonly Regex InjectionRegex = new(
-        @"<script[^>]*>\s*/\*\s*Vivaldi Mod Manager - Injection Stub.*?\*/.*?</script>",
+        @"<!--\s*Vivaldi Mod Manager - Injection Stub.*?-->\s*<!--\s*Fingerprint:.*?-->\s*<!--\s*Generated:.*?-->\s*<script[^>]*></script>",
         RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex FingerprintRegex = new(
-        @"/\*\s*Fingerprint:\s*([a-fA-F0-9]+)\s*\*/",
+        @"<!--\s*Fingerprint:\s*([a-fA-F0-9]+)\s*-->",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
@@ -453,30 +452,11 @@ public class InjectionService : IInjectionService
         var timestamp = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
         var relativeLoaderPath = Path.GetFileName(Path.GetDirectoryName(loaderPath)) + "/" + Path.GetFileName(loaderPath);
         
-        // Generate the script content without the script tags
-        var scriptContent = $@"/* {ManifestConstants.InjectionCommentMarker} v{ManifestConstants.InjectionStubVersion} */
-/* Fingerprint: {fingerprint} */
-/* Generated: {timestamp} */
-(async function() {{
-  try {{
-    const loaderPath = './{relativeLoaderPath}';
-    await import(loaderPath);
-    console.log('Vivaldi Mod Manager: Mods loaded successfully');
-  }} catch (error) {{
-    console.error('Vivaldi Mod Manager: Failed to load mods:', error);
-  }}
-}})();";
-
-        // Compute SHA256 hash for CSP integrity
-        var contentBytes = Encoding.UTF8.GetBytes(scriptContent);
-        using var sha256 = SHA256.Create();
-        var hashBytes = sha256.ComputeHash(contentBytes);
-        var base64Hash = Convert.ToBase64String(hashBytes);
-        
-        // Return script with integrity attribute for CSP compliance
-        return $@"<script type=""module"" integrity=""sha256-{base64Hash}"">
-{scriptContent}
-</script>";
+        // Use external script reference to avoid CSP inline script restrictions
+        return $@"<!-- {ManifestConstants.InjectionCommentMarker} v{ManifestConstants.InjectionStubVersion} -->
+<!-- Fingerprint: {fingerprint} -->
+<!-- Generated: {timestamp} -->
+<script type=""module"" src=""./{relativeLoaderPath}""></script>";
     }
 
     /// <summary>
