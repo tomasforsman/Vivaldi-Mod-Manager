@@ -208,20 +208,10 @@ public class InjectionServiceTests : IDisposable
 
         // Create test files with injections
         var htmlWithInjection = @"<html><head></head><body>
-<script type=""module"">
-/* Vivaldi Mod Manager - Injection Stub v1.0 */
-/* Fingerprint: abcd1234 */
-/* Generated: 2025-01-21T10:30:00Z */
-(async function() {
-  try {
-    const loaderPath = './vivaldi-mods/loader.js';
-    await import(loaderPath);
-    console.log('Vivaldi Mod Manager: Mods loaded successfully');
-  } catch (error) {
-    console.error('Vivaldi Mod Manager: Failed to load mods:', error);
-  }
-})();
-</script>
+<!-- Vivaldi Mod Manager - Injection Stub v1.0 -->
+<!-- Fingerprint: abcd1234 -->
+<!-- Generated: 2025-01-21T10:30:00Z -->
+<script type=""module"" src=""./vivaldi-mods/loader.js""></script>
 </body></html>";
 
         await File.WriteAllTextAsync(windowHtmlPath, htmlWithInjection);
@@ -270,20 +260,10 @@ public class InjectionServiceTests : IDisposable
         
         var windowHtmlPath = Path.Combine(_tempDirectory, "window.html");
         var htmlWithValidInjection = @"<html><head></head><body>
-<script type=""module"">
-/* Vivaldi Mod Manager - Injection Stub v1.0 */
-/* Fingerprint: abcd1234 */
-/* Generated: 2025-01-21T10:30:00Z */
-(async function() {
-  try {
-    const loaderPath = './vivaldi-mods/loader.js';
-    await import(loaderPath);
-    console.log('Vivaldi Mod Manager: Mods loaded successfully');
-  } catch (error) {
-    console.error('Vivaldi Mod Manager: Failed to load mods:', error);
-  }
-})();
-</script>
+<!-- Vivaldi Mod Manager - Injection Stub v1.0 -->
+<!-- Fingerprint: abcd1234 -->
+<!-- Generated: 2025-01-21T10:30:00Z -->
+<script type=""module"" src=""./vivaldi-mods/loader.js""></script>
 </body></html>";
 
         await File.WriteAllTextAsync(windowHtmlPath, htmlWithValidInjection);
@@ -407,20 +387,10 @@ public class InjectionServiceTests : IDisposable
         
         var windowHtmlPath = Path.Combine(_tempDirectory, "window.html");
         var htmlWithValidInjection = @"<html><head></head><body>
-<script type=""module"">
-/* Vivaldi Mod Manager - Injection Stub v1.0 */
-/* Fingerprint: abcd1234 */
-/* Generated: 2025-01-21T10:30:00Z */
-(async function() {
-  try {
-    const loaderPath = './vivaldi-mods/loader.js';
-    await import(loaderPath);
-    console.log('Vivaldi Mod Manager: Mods loaded successfully');
-  } catch (error) {
-    console.error('Vivaldi Mod Manager: Failed to load mods:', error);
-  }
-})();
-</script>
+<!-- Vivaldi Mod Manager - Injection Stub v1.0 -->
+<!-- Fingerprint: abcd1234 -->
+<!-- Generated: 2025-01-21T10:30:00Z -->
+<script type=""module"" src=""./vivaldi-mods/loader.js""></script>
 </body></html>";
 
         await File.WriteAllTextAsync(windowHtmlPath, htmlWithValidInjection);
@@ -482,14 +452,10 @@ public class InjectionServiceTests : IDisposable
         await File.WriteAllTextAsync(loaderPath, "// loader content");
         
         var htmlWithBrokenInjection = @"<html><head></head><body>
-<script type=""module"">
-/* Vivaldi Mod Manager - Injection Stub v1.0 */
-/* Fingerprint: oldfingerprint */
-/* Generated: 2025-01-21T10:30:00Z */
-(async function() {
-  // broken content
-})();
-</script>
+<!-- Vivaldi Mod Manager - Injection Stub v1.0 -->
+<!-- Fingerprint: oldfingerprint -->
+<!-- Generated: 2025-01-21T10:30:00Z -->
+<script type=""module"" src=""./vivaldi-mods/loader.js""></script>
 </body></html>";
 
         await File.WriteAllTextAsync(windowHtmlPath, htmlWithBrokenInjection);
@@ -522,6 +488,58 @@ public class InjectionServiceTests : IDisposable
         windowContent.Should().Contain("vivaldi-mods/loader.js");
         windowContent.Should().NotContain("oldfingerprint");
         windowContent.Should().NotContain("broken content");
+    }
+
+    /// <summary>
+    /// Tests that generated injection stubs use external script references to avoid CSP issues.
+    /// </summary>
+    [Fact]
+    public async Task InjectAsync_GeneratesStubWithExternalScript()
+    {
+        // Arrange
+        var installation = CreateTestInstallation();
+        var loaderPath = Path.Combine(_tempDirectory, "vivaldi-mods", "loader.js");
+        var windowHtmlPath = Path.Combine(_tempDirectory, "window.html");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(loaderPath)!);
+        await File.WriteAllTextAsync(loaderPath, "// loader content");
+        await File.WriteAllTextAsync(windowHtmlPath, "<html><head></head><body></body></html>");
+
+        var targets = new Dictionary<string, string>
+        {
+            ["window.html"] = windowHtmlPath
+        }.AsReadOnly();
+
+        _vivaldiServiceMock
+            .Setup(v => v.FindInjectionTargetsAsync(installation, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(targets);
+
+        _hashServiceMock
+            .Setup(h => h.ComputeStringHash(It.IsAny<string>()))
+            .Returns("abcd1234567890ef");
+
+        _loaderServiceMock
+            .Setup(l => l.GenerateLoaderAsync(It.IsAny<ManifestData>(), loaderPath, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new LoaderConfiguration());
+
+        // Act
+        await _injectionService.InjectAsync(installation, loaderPath);
+
+        // Assert
+        var htmlContent = await File.ReadAllTextAsync(windowHtmlPath);
+        
+        // Verify the script tag uses external src reference (no inline content)
+        htmlContent.Should().Contain("<script type=\"module\" src=\"./vivaldi-mods/loader.js\"></script>");
+        htmlContent.Should().NotContain("integrity="); // No integrity hash needed for external scripts
+        htmlContent.Should().NotContain("await import"); // No inline JavaScript
+        
+        // Verify it contains the expected comment structure
+        htmlContent.Should().Contain("<!-- Vivaldi Mod Manager - Injection Stub");
+        htmlContent.Should().Contain("<!-- Fingerprint:");
+        
+        installation.LastInjectionAt.Should().NotBeNull();
+        installation.InjectionFingerprint.Should().Be("abcd1234567890ef");
+        installation.LastInjectionStatus.Should().Be("Success");
     }
 
     /// <summary>
