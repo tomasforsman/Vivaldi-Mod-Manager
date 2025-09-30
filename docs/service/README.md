@@ -110,7 +110,11 @@ The service is configured via `appsettings.json` located in the service director
     "IPCPipeName": "VivaldiModManagerPipe",
     "IPCTimeoutSeconds": 30,
     "MaxConcurrentOperations": 5,
-    "ServiceStartupTimeoutSeconds": 10
+    "ServiceStartupTimeoutSeconds": 10,
+    "MonitoringDebounceMs": 2000,
+    "IntegrityCheckIntervalSeconds": 60,
+    "IntegrityCheckStaggeringEnabled": true,
+    "MaxConsecutiveFailures": 5
   }
 }
 ```
@@ -148,6 +152,161 @@ The service is configured via `appsettings.json` located in the service director
 - **Type**: Integer
 - **Default**: `10`
 - **Description**: Maximum time in seconds to wait for the service to reach Running state during installation.
+
+#### MonitoringDebounceMs
+- **Type**: Integer
+- **Default**: `2000`
+- **Description**: Debounce time in milliseconds for file system changes. Prevents multiple rapid changes from triggering multiple events.
+- **Recommended**: 2000ms (2 seconds) for most users. Increase if working with slow storage or remote filesystems.
+
+#### IntegrityCheckIntervalSeconds
+- **Type**: Integer
+- **Default**: `60`
+- **Description**: Interval in seconds between integrity checks of Vivaldi installations.
+- **Recommended**: 60-300 seconds. Lower values detect problems faster but use more resources.
+
+#### IntegrityCheckStaggeringEnabled
+- **Type**: Boolean
+- **Default**: `true`
+- **Description**: When true, distributes integrity checks evenly across the interval for multiple installations to avoid CPU spikes.
+- **Note**: Only applies when 3 or more installations are managed.
+
+#### MaxConsecutiveFailures
+- **Type**: Integer
+- **Default**: `5`
+- **Description**: Number of consecutive integrity check failures before escalating alert level to Error.
+
+## Monitoring and Integrity Checks
+
+The service continuously monitors file system changes and periodically verifies the integrity of mod injections.
+
+### File System Monitoring
+
+The file system monitor watches for changes to:
+- **Mod files**: All `.js` files in the mods directory (recursive)
+- **Vivaldi installations**: All files in `resources/vivaldi` folder for each managed installation
+
+**Key Features**:
+- **Debouncing**: Rapid file changes are consolidated into single events (configurable via `MonitoringDebounceMs`)
+- **Filtering**: Temporary files (`.tmp`, `.bak`, `.swp`, files ending with `~`) are automatically ignored
+- **Event Publishing**: File change events are logged and available for auto-heal consumption
+- **Pause/Resume**: Monitoring can be paused and resumed via IPC commands
+
+**Behavior**:
+- Monitoring starts automatically if `MonitoringEnabled` is true in the manifest
+- If the mods directory doesn't exist, a warning is logged but the service continues
+- Each Vivaldi installation gets its own file system watcher
+- Statistics are tracked: total file changes, total Vivaldi changes, last change time
+
+**Resource Considerations**:
+- Each installation adds one `FileSystemWatcher`
+- Most users will have 1-3 installations (minimal impact)
+- 5+ installations may slightly impact performance but is fully supported
+- Watchers use kernel-level notifications (very efficient)
+
+**Limitations**:
+- FileSystemWatcher may not work reliably on network drives or unusual filesystems
+- Some antivirus software may interfere with file system notifications
+- Very rapid changes (1000+ files/second) may overwhelm the watcher
+
+### Integrity Checks
+
+The integrity check service periodically verifies:
+1. **Injection Stubs**: Checks that each target file (window.html, browser.html) contains the injection stub comment
+2. **Fingerprint Matching**: Verifies the injection fingerprint matches the expected value
+3. **Loader Presence**: Confirms loader.js exists in the vivaldi-mods folder
+4. **Mod File Existence**: Validates all enabled mod files exist
+
+**Check Behavior**:
+- Runs every `IntegrityCheckIntervalSeconds` (default 60 seconds)
+- First check runs 5 seconds after service starts
+- Checks are skipped if:
+  - Safe Mode is active
+  - Auto-heal is disabled
+  - No manifest found
+
+**Staggered Checking**:
+When `IntegrityCheckStaggeringEnabled` is true and 3+ installations are managed:
+- Checks are distributed evenly across the interval
+- Example: 3 installations with 60s interval = one check every 20s
+- Prevents CPU spikes when checking many installations simultaneously
+- Stagger timing is logged at service startup
+
+**Violation Tracking**:
+- Consecutive failures are tracked per installation
+- Logging escalates based on failure count:
+  - First violation: Warning
+  - 2-3 violations: Warning with count
+  - 4+ violations: Error with count
+- Failure counter resets when a check passes
+- Events include violation details and consecutive failure count
+
+**Statistics**:
+- Total checks run
+- Total violations detected
+- Last check timestamp
+- Count of installations currently with violations
+
+### Events
+
+The monitoring services publish events that can be consumed by other components (such as the auto-heal service):
+
+#### FileChanged Event
+```csharp
+public class FileChangedEventArgs : EventArgs
+{
+    public string FilePath { get; init; }
+    public DateTimeOffset Timestamp { get; init; }
+}
+```
+
+**When**: Triggered after debounce period when a mod file changes
+**Example**: User edits a mod file and saves - event fires 2 seconds later
+
+#### VivaldiChanged Event
+```csharp
+public class VivaldiChangedEventArgs : EventArgs
+{
+    public string FilePath { get; init; }
+    public DateTimeOffset Timestamp { get; init; }
+    public string InstallationId { get; init; }
+}
+```
+
+**When**: Triggered after debounce period when a file in a Vivaldi installation changes
+**Example**: Vivaldi updates itself - events fire for each changed file
+
+#### IntegrityViolation Event
+```csharp
+public class IntegrityViolationEventArgs : EventArgs
+{
+    public VivaldiInstallation Installation { get; init; }
+    public List<string> Violations { get; init; }
+    public int ConsecutiveFailures { get; init; }
+    public DateTimeOffset Timestamp { get; init; }
+}
+```
+
+**When**: Triggered when an integrity check detects violations
+**Example**: User manually removes injection stub - violation detected within 60s
+
+### Monitoring Statistics
+
+View current monitoring statistics using the `GetMonitoringStatus` IPC command:
+
+```json
+{
+  "monitoringEnabled": true,
+  "activeWatcherCount": 3,
+  "totalFileChanges": 42,
+  "totalVivaldiChanges": 15,
+  "lastChangeTime": "2024-01-15T10:30:00Z",
+  "totalChecksRun": 120,
+  "totalViolationsDetected": 2,
+  "lastCheckTime": "2024-01-15T10:31:00Z",
+  "installationsWithViolations": 0
+}
+```
 
 ## IPC Communication
 
@@ -235,13 +394,109 @@ Returns detailed health information about the service.
     "serviceRunning": true,
     "manifestLoaded": true,
     "ipcServerRunning": true,
-    "monitoringActive": false,
-    "integrityCheckActive": false,
+    "monitoringActive": true,
+    "integrityCheckActive": true,
     "lastHealthCheckTime": "2025-01-01T13:30:00Z",
     "errors": []
   }
 }
 ```
+
+**Fields**:
+- `monitoringActive`: True if file system monitoring is running and not paused
+- `integrityCheckActive`: True if integrity checks are running (at least one check has completed)
+
+#### GetMonitoringStatus
+Returns detailed monitoring statistics and status.
+
+**Request**:
+```json
+{
+  "command": "GetMonitoringStatus",
+  "messageId": "abc123"
+}
+```
+
+**Response**:
+```json
+{
+  "messageId": "abc123",
+  "success": true,
+  "data": {
+    "monitoringEnabled": true,
+    "activeWatcherCount": 3,
+    "totalFileChanges": 42,
+    "totalVivaldiChanges": 15,
+    "lastChangeTime": "2024-01-15T10:30:00Z",
+    "totalChecksRun": 120,
+    "totalViolationsDetected": 2,
+    "lastCheckTime": "2024-01-15T10:31:00Z",
+    "installationsWithViolations": 0
+  }
+}
+```
+
+**Fields**:
+- `monitoringEnabled`: Whether monitoring is enabled in manifest
+- `activeWatcherCount`: Number of active FileSystemWatcher instances
+- `totalFileChanges`: Cumulative count of mod file changes detected
+- `totalVivaldiChanges`: Cumulative count of Vivaldi installation changes
+- `lastChangeTime`: Timestamp of most recent change (null if no changes yet)
+- `totalChecksRun`: Cumulative count of integrity checks performed
+- `totalViolationsDetected`: Cumulative count of violations found
+- `lastCheckTime`: Timestamp of most recent integrity check (null if no checks yet)
+- `installationsWithViolations`: Current count of installations with active violations
+
+#### PauseMonitoring
+Pauses file system monitoring. Integrity checks continue to run.
+
+**Request**:
+```json
+{
+  "command": "PauseMonitoring",
+  "messageId": "pause1"
+}
+```
+
+**Response**:
+```json
+{
+  "messageId": "pause1",
+  "success": true,
+  "data": {
+    "message": "Monitoring paused successfully"
+  }
+}
+```
+
+**Use Cases**:
+- During bulk mod file operations
+- When making manual changes that shouldn't trigger events
+- Troubleshooting performance issues
+
+#### ResumeMonitoring
+Resumes file system monitoring after it was paused.
+
+**Request**:
+```json
+{
+  "command": "ResumeMonitoring",
+  "messageId": "resume1"
+}
+```
+
+**Response**:
+```json
+{
+  "messageId": "resume1",
+  "success": true,
+  "data": {
+    "message": "Monitoring resumed successfully"
+  }
+}
+```
+
+**Note**: Watchers are recreated when resuming, so there may be a brief delay before changes are detected.
 
 #### Placeholder Commands (Not Yet Implemented)
 
@@ -250,10 +505,7 @@ The following commands return "not yet implemented" responses and will be availa
 - **TriggerAutoHeal** - Trigger manual auto-heal operation (Issue #38)
 - **EnableSafeMode** - Enable safe mode to disable all mods (Issue #38)
 - **DisableSafeMode** - Disable safe mode (Issue #38)
-- **ReloadManifest** - Reload the manifest from disk (Issue #37)
-- **PauseMonitoring** - Pause file system monitoring (Issue #37)
-- **ResumeMonitoring** - Resume file system monitoring (Issue #37)
-- **GetMonitoringStatus** - Get monitoring status (Issue #37)
+- **ReloadManifest** - Reload the manifest from disk (future enhancement)
 
 ### Example: Connecting to the Service (C#)
 
@@ -450,6 +702,63 @@ Get-EventLog -LogName Application -Source VivaldiModManagerService -Newest 10
    ```
 
 2. **Verify Path**: Check `appsettings.json` ManifestPath setting
+
+### Monitoring Not Working
+
+**Symptom**: File changes not detected, or integrity checks not running.
+
+**Solutions**:
+1. **Check Monitoring Status**:
+   Send `GetMonitoringStatus` command via IPC to see current state. Look at `activeWatcherCount` (should be 1+ per installation) and `monitoringEnabled`.
+
+2. **Verify Manifest Settings**:
+   Check that `monitoringEnabled` is `true` in manifest.
+
+3. **Check Event Log**:
+   ```powershell
+   Get-EventLog -LogName Application -Source VivaldiModManagerService -After (Get-Date).AddHours(-1) | 
+     Where-Object { $_.Message -like "*monitor*" -or $_.Message -like "*integrity*" }
+   ```
+   Look for "Starting File System Monitor Service" and "Starting Integrity Check Service" messages.
+
+4. **Test File Changes**:
+   - Create a test `.js` file in the mods directory
+   - Wait 5 seconds (debounce period + processing)
+   - Check Event Log for file change messages
+
+5. **Verify Paths Exist**:
+   Ensure the mods directory from manifest exists.
+
+6. **Check for FileSystemWatcher Limitations**:
+   - Network drives: May not work reliably
+   - Antivirus: Some AV software blocks file system notifications
+   - Very deep paths: FileSystemWatcher has path length limits
+
+7. **Performance with Many Installations**:
+   - 1-3 installations: Negligible impact
+   - 5+ installations: ~1-2 MB memory per watcher, minimal CPU
+   - To reduce load: Disable monitoring in manifest
+
+### Integrity Checks Reporting False Violations
+
+**Symptom**: Integrity violations detected but mods are working correctly.
+
+**Solutions**:
+1. **Check Fingerprint**:
+   - Fingerprint may be outdated after manual re-injection
+   - Re-inject mods via UI/CLI to update fingerprint
+
+2. **Verify Injection Stub Format**:
+   - Check that target files contain exact text: `<!-- Vivaldi Mod Manager - Injection Stub -->`
+   - Case-sensitive, exact spacing required
+
+3. **Safe Mode Active**:
+   - Integrity checks are skipped when safe mode is active
+   - Verify safe mode status in manifest
+
+4. **Review Violation Details**:
+   - Check Event Log for specific violation messages
+   - Each violation includes detailed reason
 
 ## FAQ
 
