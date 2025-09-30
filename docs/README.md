@@ -7,6 +7,7 @@ This directory contains additional documentation for Vivaldi Mod Manager.
 - **API Documentation**: Auto-generated API documentation will be placed here
 - **User Guides**: Step-by-step guides for end users
 - **Developer Documentation**: Technical documentation for contributors
+- **Mod Management**: Feature guides for managing, ordering, and removing mods
 - **Troubleshooting**: Common issues and solutions
 
 ## Contributing to Documentation

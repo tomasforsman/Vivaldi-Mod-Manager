@@ -21,6 +21,8 @@ namespace VivaldiModManager.UI.ViewModels;
 /// </summary>
 public partial class MainWindowViewModel : ViewModelBase
 {
+    internal const string MissingModsMetadataKey = "HasMissingMods";
+
     private readonly IVivaldiService _vivaldiService;
     private readonly IInjectionService _injectionService;
     private readonly IManifestService _manifestService;
@@ -33,6 +35,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly string _dataDirectory;
     private readonly string _manifestPath;
     private readonly string _defaultModsRootPath;
+
+    private readonly Dictionary<string, HashSet<string>> _missingModsByInstallationId = new(StringComparer.OrdinalIgnoreCase);
 
     private ManifestData? _manifest;
 
@@ -102,6 +106,11 @@ public partial class MainWindowViewModel : ViewModelBase
                 var detected = await _vivaldiService.DetectInstallationsAsync();
                 var merged = MergeInstallationsWithManifest(detected);
 
+                foreach (var installation in merged)
+                {
+                    await UpdateInjectionStatusAsync(installation);
+                }
+
                 Installations.Clear();
                 foreach (var installation in merged.OrderBy(i => i.Name))
                 {
@@ -109,6 +118,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
 
                 SetInitialSelection();
+                UpdateInjectionActiveState();
+                UpdateModLoadStates();
 
                 StatusText = merged.Count == 0
                     ? "No Vivaldi installations found"
@@ -147,6 +158,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 await _dialogService.ShowErrorAsync($"Failed to load mods: {ex.Message}");
             }
         }, "Loading mods...");
+
+        await RefreshAllInstallationStatusesAsync();
     }
 
     [RelayCommand]
@@ -199,8 +212,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
                 await SaveManifestAsync();
 
+                await UpdateInjectionStatusAsync(installation);
                 SelectedInstallation.Refresh();
-                IsInjectionActive = true;
+                UpdateInjectionActiveState();
                 IsSafeModeEnabled = false;
                 StatusText = "Mods injected successfully";
                 _systemTrayService.ShowNotification("Vivaldi Mod Manager", "Mods injected successfully", NotificationIcon.Info);
@@ -211,6 +225,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 await _dialogService.ShowErrorAsync($"Failed to inject mods: {ex.Message}");
             }
         }, "Injecting mods...");
+
+        await RefreshAllInstallationStatusesAsync();
     }
 
     [RelayCommand]
@@ -242,11 +258,14 @@ public partial class MainWindowViewModel : ViewModelBase
                     if (SelectedInstallation?.Installation != null)
                     {
                         SelectedInstallation.Installation.LastInjectionStatus = "Safe Mode";
+                        SelectedInstallation.Installation.Metadata[MissingModsMetadataKey] = bool.FalseString;
                         SelectedInstallation.Refresh();
                     }
 
                     await SaveManifestAsync();
                 }
+
+                UpdateInjectionActiveState();
 
                 _systemTrayService.ShowNotification("Vivaldi Mod Manager", "Safe Mode enabled", NotificationIcon.Warning);
             }
@@ -256,6 +275,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 await _dialogService.ShowErrorAsync($"Failed to enable Safe Mode: {ex.Message}");
             }
         }, "Enabling Safe Mode...");
+
+        await RefreshAllInstallationStatusesAsync();
     }
 
     [RelayCommand]
@@ -279,6 +300,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 _systemTrayService.ShowNotification("Vivaldi Mod Manager", $"Added mod: {result}", NotificationIcon.Info);
             }
         }, "Adding mod...");
+
+        await RefreshAllInstallationStatusesAsync();
     }
 
     [RelayCommand]
@@ -307,6 +330,122 @@ public partial class MainWindowViewModel : ViewModelBase
                 _systemTrayService.ShowNotification("Vivaldi Mod Manager", $"Added {added} mod(s)", NotificationIcon.Info);
             }
         }, "Adding mods...");
+
+        await RefreshAllInstallationStatusesAsync();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRemoveMod))]
+    private async Task RemoveModAsync()
+    {
+        if (SelectedMod == null)
+        {
+            return;
+        }
+
+        await ExecuteAsync(async () =>
+        {
+            await EnsureManifestLoadedAsync();
+
+            var modToRemove = SelectedMod;
+            var currentIndex = Mods.IndexOf(modToRemove);
+            string? nextSelectionId = null;
+
+            if (Mods.Count > 1)
+            {
+                var fallbackIndex = currentIndex < Mods.Count - 1 ? currentIndex + 1 : currentIndex - 1;
+                nextSelectionId = Mods.ElementAtOrDefault(fallbackIndex)?.Mod.Id;
+            }
+
+            var mod = modToRemove.Mod;
+            var modsRoot = ResolveModsRootPath();
+            var modPath = Path.Combine(modsRoot, mod.Filename);
+
+            try
+            {
+                if (File.Exists(modPath))
+                {
+                    File.Delete(modPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete mod file {ModPath}", modPath);
+                await _dialogService.ShowErrorAsync($"Failed to delete mod file: {ex.Message}");
+            }
+
+            _manifest!.Mods.Remove(mod);
+            NormalizeModOrder(_manifest.Mods);
+
+            await SaveManifestAsync();
+            RebuildModCollection(nextSelectionId);
+
+            StatusText = $"Removed mod '{mod.Filename}'";
+            _systemTrayService.ShowNotification("Vivaldi Mod Manager", $"Removed mod: {mod.Filename}", NotificationIcon.Info);
+        }, "Removing mod...");
+
+        await RefreshAllInstallationStatusesAsync();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanMoveModUp))]
+    private async Task MoveModUpAsync()
+    {
+        if (!CanMoveModUp())
+        {
+            return;
+        }
+
+        await ExecuteAsync(async () =>
+        {
+            await EnsureManifestLoadedAsync();
+
+            var currentIndex = Mods.IndexOf(SelectedMod!);
+            var targetIndex = currentIndex - 1;
+
+            SwapModOrder(currentIndex, targetIndex);
+            NormalizeModOrder(_manifest!.Mods);
+
+            var selectedId = SelectedMod!.Mod.Id;
+            var modName = SelectedMod!.Mod.Filename;
+
+            await SaveManifestAsync();
+            RebuildModCollection(selectedId);
+
+            StatusText = $"Moved '{modName}' up";
+            _systemTrayService.ShowNotification("Vivaldi Mod Manager", $"Moved up: {modName}", NotificationIcon.Info);
+        }, "Moving mod...");
+
+        await RefreshAllInstallationStatusesAsync();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanMoveModDown))]
+    private async Task MoveModDownAsync()
+    {
+        if (!CanMoveModDown())
+        {
+            return;
+        }
+
+        await ExecuteAsync(async () =>
+        {
+            await EnsureManifestLoadedAsync();
+
+            var currentIndex = Mods.IndexOf(SelectedMod!);
+            var targetIndex = currentIndex + 1;
+
+            SwapModOrder(currentIndex, targetIndex);
+            NormalizeModOrder(_manifest!.Mods);
+
+            var selectedId = SelectedMod!.Mod.Id;
+            var modName = SelectedMod!.Mod.Filename;
+
+            await SaveManifestAsync();
+            RebuildModCollection(selectedId);
+
+            StatusText = $"Moved '{modName}' down";
+            _systemTrayService.ShowNotification("Vivaldi Mod Manager", $"Moved down: {modName}", NotificationIcon.Info);
+        }, "Moving mod...");
+
+        await RefreshAllInstallationStatusesAsync();
     }
 
     [RelayCommand]
@@ -514,27 +653,250 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         SelectedInstallation = Installations.FirstOrDefault(i => i.Installation.Id == active.Id);
-        IsInjectionActive = string.Equals(active.LastInjectionStatus, "Success", StringComparison.OrdinalIgnoreCase);
+        UpdateInjectionActiveState();
     }
 
-    private void RebuildModCollection()
+    private void RebuildModCollection(string? retainSelectionId = null)
     {
         Mods.Clear();
 
         if (_manifest == null)
         {
+            SelectedMod = null;
             return;
         }
 
+        ModItemViewModel? nextSelection = null;
         foreach (var mod in _manifest.Mods.OrderBy(m => m.Order))
         {
-            Mods.Add(new ModItemViewModel(mod));
+            var viewModel = new ModItemViewModel(mod);
+            Mods.Add(viewModel);
+            if (retainSelectionId != null && mod.Id == retainSelectionId)
+            {
+                nextSelection = viewModel;
+            }
+        }
+
+        SelectedMod = nextSelection ?? Mods.FirstOrDefault();
+        UpdateModLoadStates();
+    }
+
+    private static void NormalizeModOrder(ICollection<ModInfo> mods)
+    {
+        var ordered = mods.OrderBy(m => m.Order).ToList();
+        for (var index = 0; index < ordered.Count; index++)
+        {
+            ordered[index].Order = index + 1;
         }
     }
 
     private string ResolveModsRootPath()
     {
         return _manifest?.Settings.ModsRootPath ?? _defaultModsRootPath;
+    }
+
+    private static string FormatTimestamp(DateTimeOffset? timestamp)
+    {
+        return timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "never";
+    }
+
+    private async Task UpdateInjectionStatusAsync(VivaldiInstallation installation)
+    {
+        if (string.Equals(installation.LastInjectionStatus, "Safe Mode", StringComparison.OrdinalIgnoreCase))
+        {
+            installation.Metadata[MissingModsMetadataKey] = bool.FalseString;
+            _missingModsByInstallationId[installation.Id] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return;
+        }
+
+        await EnsureManifestLoadedAsync();
+
+        if (_manifest == null)
+        {
+            return;
+        }
+
+        if (installation.LastInjectionAt == null)
+        {
+            installation.Metadata[MissingModsMetadataKey] = bool.FalseString;
+            installation.LastInjectionStatus = "Not injected";
+            _missingModsByInstallationId[installation.Id] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return;
+        }
+
+        try
+        {
+            var targets = await _vivaldiService.FindInjectionTargetsAsync(installation);
+            if (targets.Count == 0)
+            {
+                installation.Metadata[MissingModsMetadataKey] = bool.TrueString;
+                installation.LastInjectionStatus = $"Injected {FormatTimestamp(installation.LastInjectionAt)} (targets missing)";
+                _missingModsByInstallationId[installation.Id] = new HashSet<string>(_manifest.GetEnabledModsInOrder().Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
+                return;
+            }
+
+            var baseDirectory = GetInjectionBaseDirectory(targets);
+            var loaderDirectory = Path.Combine(baseDirectory, "vivaldi-mods");
+            var modsDirectory = Path.Combine(loaderDirectory, "mods");
+            var loaderPath = Path.Combine(loaderDirectory, ManifestConstants.DefaultLoaderFilename);
+
+            var enabledMods = _manifest.GetEnabledModsInOrder().ToList();
+
+            var missingSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var missingMods = 0;
+            if (enabledMods.Any())
+            {
+                if (!Directory.Exists(modsDirectory))
+                {
+                    missingMods = enabledMods.Count;
+                }
+                else
+                {
+                    foreach (var mod in enabledMods)
+                    {
+                        if (!File.Exists(Path.Combine(modsDirectory, mod.Filename)))
+                        {
+                            missingSet.Add(mod.Id);
+                        }
+                    }
+                    missingMods = missingSet.Count;
+                }
+            }
+
+            var loaderMissing = File.Exists(loaderPath) ? 0 : 1;
+
+            if (missingMods > 0 || loaderMissing > 0)
+            {
+                var missingParts = new List<string>();
+                if (loaderMissing > 0)
+                {
+                    missingParts.Add("loader");
+                    foreach (var mod in enabledMods)
+                    {
+                        missingSet.Add(mod.Id);
+                    }
+                }
+
+                if (missingMods > 0)
+                {
+                    missingParts.Add(missingMods == 1 ? "1 mod" : $"{missingMods} mods");
+                }
+
+                installation.LastInjectionStatus = $"Injected {FormatTimestamp(installation.LastInjectionAt)} (missing {string.Join(" & ", missingParts)})";
+                installation.Metadata[MissingModsMetadataKey] = bool.TrueString;
+                _missingModsByInstallationId[installation.Id] = missingSet;
+            }
+            else
+            {
+                installation.LastInjectionStatus = $"Injected {FormatTimestamp(installation.LastInjectionAt)}";
+                installation.Metadata[MissingModsMetadataKey] = bool.FalseString;
+                _missingModsByInstallationId[installation.Id] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to evaluate injection status for {Installation}", installation.Name);
+            installation.LastInjectionStatus = $"Injected {FormatTimestamp(installation.LastInjectionAt)} (status unknown)";
+            installation.Metadata[MissingModsMetadataKey] = bool.TrueString;
+            _missingModsByInstallationId[installation.Id] = new HashSet<string>(_manifest.GetEnabledModsInOrder().Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (SelectedInstallation?.Installation.Id == installation.Id)
+        {
+            UpdateModLoadStates();
+        }
+    }
+
+    private async Task RefreshAllInstallationStatusesAsync()
+    {
+        if (Installations.Count == 0)
+        {
+            UpdateModLoadStates();
+            UpdateInjectionActiveState();
+            return;
+        }
+
+        foreach (var installationViewModel in Installations)
+        {
+            await UpdateInjectionStatusAsync(installationViewModel.Installation);
+            installationViewModel.Refresh();
+        }
+
+        UpdateModLoadStates();
+        UpdateInjectionActiveState();
+    }
+
+    private void UpdateInjectionActiveState()
+    {
+        if (SelectedInstallation?.Installation == null)
+        {
+            IsInjectionActive = false;
+            return;
+        }
+
+        IsInjectionActive = InstallationIsHealthy(SelectedInstallation.Installation);
+    }
+
+    private static bool InstallationIsHealthy(VivaldiInstallation installation)
+    {
+        return installation.LastInjectionAt.HasValue && !InstallationHasWarnings(installation);
+    }
+
+    internal static bool InstallationHasWarnings(VivaldiInstallation installation)
+    {
+        return installation.Metadata.TryGetValue(MissingModsMetadataKey, out var value) &&
+               bool.TryParse(value, out var result) && result;
+    }
+
+    private void UpdateModLoadStates()
+    {
+        if (Mods.Count == 0)
+        {
+            return;
+        }
+
+        HashSet<string>? missingIds = null;
+        var selectedInstallationId = SelectedInstallation?.Installation.Id;
+        if (!string.IsNullOrEmpty(selectedInstallationId) &&
+            _missingModsByInstallationId.TryGetValue(selectedInstallationId, out var set))
+        {
+            missingIds = set;
+        }
+
+        foreach (var modViewModel in Mods)
+        {
+            var isMissing = missingIds != null && missingIds.Contains(modViewModel.Mod.Id);
+            modViewModel.UpdateStatus(isMissing);
+        }
+    }
+
+    private void SwapModOrder(int firstIndex, int secondIndex)
+    {
+        if (_manifest == null)
+        {
+            return;
+        }
+
+        if (firstIndex < 0 || secondIndex < 0 || firstIndex >= Mods.Count || secondIndex >= Mods.Count)
+        {
+            return;
+        }
+
+        var firstMod = Mods[firstIndex].Mod;
+        var secondMod = Mods[secondIndex].Mod;
+        (firstMod.Order, secondMod.Order) = (secondMod.Order, firstMod.Order);
+    }
+
+    private bool CanRemoveMod() => SelectedMod != null;
+
+    private bool CanMoveModUp()
+    {
+        return SelectedMod != null && Mods.IndexOf(SelectedMod) > 0;
+    }
+
+    private bool CanMoveModDown()
+    {
+        return SelectedMod != null && Mods.IndexOf(SelectedMod) < Mods.Count - 1;
     }
 
     private static string NormalizePath(string path)
@@ -637,10 +999,17 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    partial void OnSelectedModChanged(ModItemViewModel? value)
+    {
+        RemoveModCommand.NotifyCanExecuteChanged();
+        MoveModUpCommand.NotifyCanExecuteChanged();
+        MoveModDownCommand.NotifyCanExecuteChanged();
+    }
+
     partial void OnSelectedInstallationChanged(VivaldiInstallationViewModel? value)
     {
-        IsInjectionActive = value?.Installation.LastInjectionStatus != null &&
-            string.Equals(value.Installation.LastInjectionStatus, "Success", StringComparison.OrdinalIgnoreCase);
+        UpdateInjectionActiveState();
+        UpdateModLoadStates();
     }
 }
 
@@ -664,7 +1033,9 @@ public partial class VivaldiInstallationViewModel : ViewModelBase
         {
             if (!string.IsNullOrWhiteSpace(Installation.LastInjectionStatus))
             {
-                return Installation.LastInjectionStatus;
+                return MainWindowViewModel.InstallationHasWarnings(Installation)
+                    ? $"⚠ {Installation.LastInjectionStatus}"
+                    : Installation.LastInjectionStatus;
             }
 
             return Installation.IsManaged ? "✓ Managed" : "○ Available";
@@ -731,7 +1102,7 @@ public partial class ModItemViewModel : ViewModelBase
             {
                 Mod.Enabled = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(StatusText));
+                StatusText = value ? "Loaded" : "Unloaded";
             }
         }
     }
@@ -764,11 +1135,18 @@ public partial class ModItemViewModel : ViewModelBase
 
     public string SizeText => FormatFileSize(Mod.FileSize);
 
-    public string StatusText => Mod.Enabled ? "Enabled" : "Disabled";
+    private string _statusText = "Unloaded";
+
+    public string StatusText
+    {
+        get => _statusText;
+        private set => SetProperty(ref _statusText, value);
+    }
 
     public ModItemViewModel(ModInfo mod)
     {
         Mod = mod ?? throw new ArgumentNullException(nameof(mod));
+        UpdateStatus(false);
     }
 
     public void Refresh()
@@ -779,7 +1157,22 @@ public partial class ModItemViewModel : ViewModelBase
         OnPropertyChanged(nameof(Order));
         OnPropertyChanged(nameof(Notes));
         OnPropertyChanged(nameof(SizeText));
-        OnPropertyChanged(nameof(StatusText));
+    }
+
+    public void UpdateStatus(bool isMissing)
+    {
+        if (!Mod.Enabled)
+        {
+            StatusText = "Unloaded";
+        }
+        else if (isMissing)
+        {
+            StatusText = "Missing";
+        }
+        else
+        {
+            StatusText = "Loaded";
+        }
     }
 
     private static string FormatFileSize(long bytes)

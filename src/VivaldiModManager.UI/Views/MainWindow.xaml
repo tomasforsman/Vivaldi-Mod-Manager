@@ -32,7 +32,7 @@
                 <MenuItem Header="_Refresh" Command="{Binding RefreshInstallationsCommand}"/>
             </MenuItem>
             <MenuItem Header="_Tools">
-                <MenuItem Header="_Inject Mods" Command="{Binding InjectModsCommand}"/>
+                <MenuItem Header="_Inject Mod Loader" Command="{Binding InjectModsCommand}"/>
                 <MenuItem Header="_Safe Mode" Command="{Binding EnableSafeModeCommand}"/>
             </MenuItem>
             <MenuItem Header="_Help">
@@ -83,7 +83,7 @@
                 <Border Grid.Row="3" Style="{StaticResource ModernCardStyle}">
                     <StackPanel>
                         <TextBlock Text="Quick Actions" Style="{StaticResource SubheadingTextStyle}"/>
-                        <Button Content="🔧 Inject Mods" 
+                        <Button Content="🔧 Inject Mod Loader" 
                                 Command="{Binding InjectModsCommand}"
                                 Style="{StaticResource ModernButtonStyle}"
                                 Margin="0,4"/>
@@ -142,6 +142,18 @@
                                     Command="{Binding ExportModsCommand}"
                                     Style="{StaticResource ModernButtonStyle}"
                                     Margin="4,0"/>
+                            <Button Content="Move Up"
+                                    Command="{Binding MoveModUpCommand}"
+                                    Style="{StaticResource ModernButtonStyle}"
+                                    Margin="4,0"/>
+                            <Button Content="Move Down"
+                                    Command="{Binding MoveModDownCommand}"
+                                    Style="{StaticResource ModernButtonStyle}"
+                                    Margin="4,0"/>
+                            <Button Content="Remove"
+                                    Command="{Binding RemoveModCommand}"
+                                    Style="{StaticResource ModernButtonStyle}"
+                                    Margin="4,0"/>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -151,6 +163,11 @@
                     <ListBox ItemsSource="{Binding Mods}"
                             SelectedItem="{Binding SelectedMod}"
                             Style="{StaticResource ModernListBoxStyle}">
+                        <ListBox.InputBindings>
+                            <KeyBinding Command="{Binding RemoveModCommand}" Key="Delete"/>
+                            <KeyBinding Command="{Binding MoveModUpCommand}" Key="Up" Modifiers="Control"/>
+                            <KeyBinding Command="{Binding MoveModDownCommand}" Key="Down" Modifiers="Control"/>
+                        </ListBox.InputBindings>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Grid>
@@ -169,6 +186,7 @@
                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
                                         <TextBlock Text="{Binding Version}" Style="{StaticResource CaptionTextStyle}"/>
                                         <TextBlock Text="{Binding SizeText}" Style="{StaticResource CaptionTextStyle}"/>
+                                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource CaptionTextStyle}"/>
                                     </StackPanel>
                                     
                                     <TextBlock Grid.Column="2" 

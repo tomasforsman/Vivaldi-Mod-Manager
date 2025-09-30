@@ -578,7 +578,14 @@ public class InjectionService : IInjectionService
             }
 
             // Check if injection looks valid
-            if (match.Value.Contains("Vivaldi Mod Manager") && match.Value.Contains("import"))
+            var snippet = match.Value;
+            var containsMarker = snippet.Contains("Vivaldi Mod Manager", StringComparison.Ordinal);
+            var containsScriptTag = snippet.Contains("<script", StringComparison.OrdinalIgnoreCase);
+            var containsModuleType = snippet.Contains("type=\"module\"", StringComparison.OrdinalIgnoreCase);
+            var containsSrc = snippet.Contains("src=\"", StringComparison.OrdinalIgnoreCase);
+            var containsAwaitImport = snippet.Contains("await import", StringComparison.Ordinal);
+
+            if (containsMarker && containsScriptTag && containsModuleType && (containsSrc || containsAwaitImport))
             {
                 status.ValidationStatus = InjectionValidationStatus.Valid;
             }
