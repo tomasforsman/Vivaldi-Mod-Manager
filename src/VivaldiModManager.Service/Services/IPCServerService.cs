@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using VivaldiModManager.Core.Services;
+using VivaldiModManager.Service.BackgroundServices;
 using VivaldiModManager.Service.Configuration;
 using VivaldiModManager.Service.IPC;
 using VivaldiModManager.Service.Models;
@@ -21,6 +22,8 @@ public class IPCServerService : IHostedService, IDisposable
     private readonly ServiceConfiguration _config;
     private readonly IManifestService _manifestService;
     private readonly IVivaldiService _vivaldiService;
+    private readonly FileSystemMonitorService _fileSystemMonitorService;
+    private readonly IntegrityCheckService _integrityCheckService;
     private readonly DateTimeOffset _startTime;
     private readonly List<Task> _clientTasks;
     private CancellationTokenSource? _cancellationTokenSource;
@@ -35,16 +38,22 @@ public class IPCServerService : IHostedService, IDisposable
     /// <param name="config">The service configuration.</param>
     /// <param name="manifestService">The manifest service.</param>
     /// <param name="vivaldiService">The Vivaldi service.</param>
+    /// <param name="fileSystemMonitorService">The file system monitor service.</param>
+    /// <param name="integrityCheckService">The integrity check service.</param>
     public IPCServerService(
         ILogger<IPCServerService> logger,
         ServiceConfiguration config,
         IManifestService manifestService,
-        IVivaldiService vivaldiService)
+        IVivaldiService vivaldiService,
+        FileSystemMonitorService fileSystemMonitorService,
+        IntegrityCheckService integrityCheckService)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _manifestService = manifestService ?? throw new ArgumentNullException(nameof(manifestService));
         _vivaldiService = vivaldiService ?? throw new ArgumentNullException(nameof(vivaldiService));
+        _fileSystemMonitorService = fileSystemMonitorService ?? throw new ArgumentNullException(nameof(fileSystemMonitorService));
+        _integrityCheckService = integrityCheckService ?? throw new ArgumentNullException(nameof(integrityCheckService));
         _startTime = DateTimeOffset.UtcNow;
         _clientTasks = new List<Task>();
     }
@@ -216,14 +225,20 @@ public class IPCServerService : IHostedService, IDisposable
                 case IPCCommand.GetHealthCheck:
                     return await HandleGetHealthCheckAsync(command, cancellationToken).ConfigureAwait(false);
 
+                case IPCCommand.GetMonitoringStatus:
+                    return HandleGetMonitoringStatus(command);
+
+                case IPCCommand.PauseMonitoring:
+                    return HandlePauseMonitoring(command);
+
+                case IPCCommand.ResumeMonitoring:
+                    return await HandleResumeMonitoringAsync(command).ConfigureAwait(false);
+
                 case IPCCommand.TriggerAutoHeal:
                 case IPCCommand.EnableSafeMode:
                 case IPCCommand.DisableSafeMode:
                 case IPCCommand.ReloadManifest:
-                case IPCCommand.PauseMonitoring:
-                case IPCCommand.ResumeMonitoring:
-                case IPCCommand.GetMonitoringStatus:
-                    return CreateNotImplementedResponse(command, $"{command.Command} is not yet implemented. This will be available in future issues (#37, #38).");
+                    return CreateNotImplementedResponse(command, $"{command.Command} is not yet implemented. This will be available in future issues (#38).");
 
                 default:
                     return CreateErrorResponse(command, $"Unknown command: {command.Command}");
@@ -287,18 +302,70 @@ public class IPCServerService : IHostedService, IDisposable
             errors.Add($"Error checking manifest: {ex.Message}");
         }
 
+        // Check monitoring and integrity check status
+        bool monitoringActive = !_fileSystemMonitorService.IsPaused && _fileSystemMonitorService.ActiveWatcherCount > 0;
+        bool integrityCheckActive = _integrityCheckService.LastCheckTime != null;
+
         var healthCheck = new HealthCheck
         {
             ServiceRunning = _isRunning,
             ManifestLoaded = manifestLoaded,
             IPCServerRunning = _isRunning,
-            MonitoringActive = false,
-            IntegrityCheckActive = false,
+            MonitoringActive = monitoringActive,
+            IntegrityCheckActive = integrityCheckActive,
             LastHealthCheckTime = DateTimeOffset.UtcNow,
             Errors = errors
         };
 
         return Task.FromResult(CreateSuccessResponse(command, healthCheck));
+    }
+
+    private IPCResponseMessage HandleGetMonitoringStatus(IPCCommandMessage command)
+    {
+        var status = new MonitoringStatus
+        {
+            MonitoringEnabled = true, // Will be determined from manifest in actual implementation
+            ActiveWatcherCount = _fileSystemMonitorService.ActiveWatcherCount,
+            TotalFileChanges = _fileSystemMonitorService.TotalFileChanges,
+            TotalVivaldiChanges = _fileSystemMonitorService.TotalVivaldiChanges,
+            LastChangeTime = _fileSystemMonitorService.LastChangeTime,
+            TotalChecksRun = _integrityCheckService.TotalChecksRun,
+            TotalViolationsDetected = _integrityCheckService.TotalViolationsDetected,
+            LastCheckTime = _integrityCheckService.LastCheckTime,
+            InstallationsWithViolations = _integrityCheckService.InstallationsWithViolations
+        };
+
+        return CreateSuccessResponse(command, status);
+    }
+
+    private IPCResponseMessage HandlePauseMonitoring(IPCCommandMessage command)
+    {
+        try
+        {
+            _fileSystemMonitorService.PauseMonitoring();
+            _logger.LogInformation("Monitoring paused via IPC command");
+            return CreateSuccessResponse(command, new { Message = "Monitoring paused successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error pausing monitoring");
+            return CreateErrorResponse(command, $"Error pausing monitoring: {ex.Message}");
+        }
+    }
+
+    private async Task<IPCResponseMessage> HandleResumeMonitoringAsync(IPCCommandMessage command)
+    {
+        try
+        {
+            await _fileSystemMonitorService.ResumeMonitoringAsync().ConfigureAwait(false);
+            _logger.LogInformation("Monitoring resumed via IPC command");
+            return CreateSuccessResponse(command, new { Message = "Monitoring resumed successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resuming monitoring");
+            return CreateErrorResponse(command, $"Error resuming monitoring: {ex.Message}");
+        }
     }
 
     private static IPCResponseMessage CreateSuccessResponse(IPCCommandMessage command, object data)
