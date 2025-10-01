@@ -48,5 +48,10 @@ public enum IPCCommand
     /// <summary>
     /// Get monitoring status (placeholder for issue #37).
     /// </summary>
-    GetMonitoringStatus
+    GetMonitoringStatus,
+
+    /// <summary>
+    /// Get heal history.
+    /// </summary>
+    GetHealHistory
 }
