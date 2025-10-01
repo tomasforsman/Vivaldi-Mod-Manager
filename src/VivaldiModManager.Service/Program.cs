@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.EventLog;
 using VivaldiModManager.Core.Services;
+using VivaldiModManager.Service.BackgroundServices;
 using VivaldiModManager.Service.Configuration;
 using VivaldiModManager.Service.Services;
 
@@ -57,6 +58,13 @@ public class Program
                 services.AddSingleton<IInjectionService, InjectionService>();
                 services.AddSingleton<ILoaderService, LoaderService>();
                 services.AddSingleton<IHashService, HashService>();
+
+                // Register background services as both singleton and hosted service
+                services.AddSingleton<FileSystemMonitorService>();
+                services.AddHostedService(provider => provider.GetRequiredService<FileSystemMonitorService>());
+
+                services.AddSingleton<IntegrityCheckService>();
+                services.AddHostedService(provider => provider.GetRequiredService<IntegrityCheckService>());
 
                 // Register IPC server as both singleton and hosted service
                 services.AddSingleton<IPCServerService>();
