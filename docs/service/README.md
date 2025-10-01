@@ -308,6 +308,130 @@ View current monitoring statistics using the `GetMonitoringStatus` IPC command:
 }
 ```
 
+## Auto-Heal Service
+
+The Auto-Heal Service automatically restores mod injections when Vivaldi updates or integrity violations are detected, ensuring mods persist across browser updates without manual intervention.
+
+### Overview
+
+Auto-heal responds to two types of events:
+- **Vivaldi Updates**: Detected when new version folders appear
+- **Integrity Violations**: Detected when injection stubs are missing or corrupted
+
+### Key Features
+
+**Folder Stabilization**: Waits for Vivaldi files to be accessible before injecting (up to 30 seconds)
+
+**Cooldown Period**: 30-second cooldown between heals for the same installation prevents thrashing
+
+**Retry Logic**: Failed heals are automatically retried with exponential backoff:
+  - First retry: After 5 seconds
+  - Second retry: After 30 seconds
+  - Third retry: After 2 minutes
+  - After 3 failures, stops retrying and logs error
+
+**Rollback on Failure**: If a heal fails partway through, the service attempts to roll back changes
+
+**Heal History**: Maintains a circular buffer of the last 50 heal attempts with full details
+
+### Configuration
+
+In `appsettings.json`:
+
+```json
+{
+  "ServiceConfiguration": {
+    "AutoHealRetryDelays": [5, 30, 120],
+    "AutoHealMaxRetries": 3,
+    "AutoHealCooldownSeconds": 30,
+    "VivaldiFolderStabilizationMaxWaitSeconds": 30,
+    "HealHistoryMaxEntries": 50,
+    "HealHistoryFilePath": "%APPDATA%\\VivaldiModManager\\heal-history.json"
+  }
+}
+```
+
+### Metrics
+
+The service tracks:
+- `TotalHealsAttempted`: Total number of heal attempts
+- `TotalHealsSucceeded`: Number of successful heals
+- `TotalHealsFailed`: Number of failed heals after max retries
+
+Access metrics via `GetServiceStatus` IPC command.
+
+### Detailed Documentation
+
+See [Auto-Heal Documentation](auto-heal.md) for complete details on:
+- Heal process steps
+- Folder stabilization logic
+- Cooldown behavior
+- Retry logic
+- Rollback mechanism
+- Heal history
+- Troubleshooting
+
+## Safe Mode
+
+Safe Mode is an emergency feature that immediately disables all mod injections across all Vivaldi installations.
+
+### When to Use
+
+Use Safe Mode when:
+- A mod is causing Vivaldi to crash or behave incorrectly
+- You need to troubleshoot whether mods are causing an issue
+- You want to temporarily disable all mods without losing your configuration
+
+### How It Works
+
+**Activation**:
+1. Sets `SafeModeActive` flag in manifest
+2. Cancels any pending heal operations
+3. Removes injection stubs from all installations
+4. Blocks auto-heal from running
+5. Persists state across service restarts
+
+**Deactivation**:
+1. Clears `SafeModeActive` flag
+2. Queues heal requests for all installations
+3. Resumes auto-heal operation
+4. Mods are automatically restored
+
+### IPC Commands
+
+Enable Safe Mode:
+```json
+{
+  "command": "EnableSafeMode",
+  "messageId": "12345"
+}
+```
+
+Disable Safe Mode:
+```json
+{
+  "command": "DisableSafeMode",
+  "messageId": "12345"
+}
+```
+
+### Persistence
+
+Safe Mode state persists across:
+- Service restarts
+- System reboots
+- Vivaldi updates
+
+### Detailed Documentation
+
+See [Safe Mode Documentation](safe-mode.md) for complete details on:
+- Activation/deactivation process
+- Impact on other features
+- Error handling
+- Use cases
+- Best practices
+- Troubleshooting
+
 ## IPC Communication
 
 The service uses Windows Named Pipes for IPC, providing a request-response pattern with JSON serialization.
@@ -498,14 +622,134 @@ Resumes file system monitoring after it was paused.
 
 **Note**: Watchers are recreated when resuming, so there may be a brief delay before changes are detected.
 
-#### Placeholder Commands (Not Yet Implemented)
+#### TriggerAutoHeal
 
-The following commands return "not yet implemented" responses and will be available in future releases:
+Manually triggers auto-heal for all managed installations.
 
-- **TriggerAutoHeal** - Trigger manual auto-heal operation (Issue #38)
-- **EnableSafeMode** - Enable safe mode to disable all mods (Issue #38)
-- **DisableSafeMode** - Disable safe mode (Issue #38)
-- **ReloadManifest** - Reload the manifest from disk (future enhancement)
+**Request**:
+```json
+{
+  "command": "TriggerAutoHeal",
+  "messageId": "guid"
+}
+```
+
+**Response**:
+```json
+{
+  "messageId": "same-guid",
+  "success": true,
+  "data": {
+    "message": "Heal requested for 2 installation(s)",
+    "count": 2
+  }
+}
+```
+
+#### EnableSafeMode
+
+Activates Safe Mode, disabling all mod injections.
+
+**Request**:
+```json
+{
+  "command": "EnableSafeMode",
+  "messageId": "guid"
+}
+```
+
+**Response**:
+```json
+{
+  "messageId": "same-guid",
+  "success": true,
+  "data": {
+    "message": "Safe Mode activated, processed 2 installation(s)",
+    "count": 2
+  }
+}
+```
+
+#### DisableSafeMode
+
+Deactivates Safe Mode and queues heal requests to restore mods.
+
+**Request**:
+```json
+{
+  "command": "DisableSafeMode",
+  "messageId": "guid"
+}
+```
+
+**Response**:
+```json
+{
+  "messageId": "same-guid",
+  "success": true,
+  "data": {
+    "message": "Safe Mode deactivated, 2 heal request(s) queued",
+    "count": 2
+  }
+}
+```
+
+#### ReloadManifest
+
+Reloads the manifest from disk.
+
+**Request**:
+```json
+{
+  "command": "ReloadManifest",
+  "messageId": "guid"
+}
+```
+
+**Response**:
+```json
+{
+  "messageId": "same-guid",
+  "success": true,
+  "data": {
+    "message": "Manifest reloaded successfully",
+    "monitoringEnabled": true,
+    "autoHealEnabled": true,
+    "safeModeActive": false
+  }
+}
+```
+
+#### GetHealHistory
+
+Retrieves the heal history (last 50 attempts by default).
+
+**Request**:
+```json
+{
+  "command": "GetHealHistory",
+  "messageId": "guid"
+}
+```
+
+**Response**:
+```json
+{
+  "messageId": "same-guid",
+  "success": true,
+  "data": [
+    {
+      "installationId": "vivaldi-stable",
+      "timestamp": "2024-01-15T10:30:00Z",
+      "triggerReason": "VivaldiUpdate",
+      "success": true,
+      "errorMessage": null,
+      "retryCount": 0,
+      "duration": "00:00:02.5"
+    }
+  ]
+}
+```
 
 ### Example: Connecting to the Service (C#)
 
@@ -760,6 +1004,64 @@ Get-EventLog -LogName Application -Source VivaldiModManagerService -Newest 10
    - Check Event Log for specific violation messages
    - Each violation includes detailed reason
 
+### Auto-Heal Not Triggering
+
+**Symptom**: Vivaldi updates or integrity violations detected, but mods are not automatically restored.
+
+**Solutions**:
+1. **Check Auto-Heal Enabled**:
+   Use `GetServiceStatus` IPC command to verify `autoHealEnabled` is `true`
+
+2. **Check Safe Mode**:
+   Verify `safeModeActive` is `false` - auto-heal is disabled in Safe Mode
+
+3. **Review Heal History**:
+   Use `GetHealHistory` IPC command to see if heals were attempted and why they failed
+
+4. **Check Service Logs**:
+   Look for auto-heal related messages in Event Viewer
+
+5. **Verify Monitoring Running**:
+   Ensure File System Monitor and Integrity Check services are active
+
+### Auto-Heal Failing Repeatedly
+
+**Symptom**: Heal attempts fail consistently, possibly after max retries.
+
+**Solutions**:
+1. **Check Heal History for Errors**:
+   ```json
+   { "command": "GetHealHistory", "messageId": "guid" }
+   ```
+   Review error messages for specific failure reasons
+
+2. **Verify Vivaldi Installation**:
+   - Ensure Vivaldi is installed and accessible
+   - Check that injection target files exist
+   - Verify file permissions
+
+3. **Check Disk Space**:
+   Mod files need to be copied during heal
+
+4. **Close Vivaldi**:
+   Files may be locked if Vivaldi is running - close browser and trigger manual heal
+
+5. **Check Mod Files**:
+   Verify enabled mod files exist in the mods directory
+
+### Cooldown Preventing Heals
+
+**Symptom**: Heal attempts seem delayed or don't happen immediately.
+
+**This is normal behavior**:
+- 30-second cooldown between heals for the same installation
+- Prevents rapid repeated heals from causing system thrashing
+- Wait for cooldown period to expire
+
+**To verify**:
+- Check service logs for "cooldown active" messages
+- Use `GetHealthCheck` to see active cooldowns
+
 ## FAQ
 
 ### Q: Can I run multiple instances of the service?
@@ -772,7 +1074,13 @@ Get-EventLog -LogName Application -Source VivaldiModManagerService -Newest 10
 **A**: No, named pipes are local-machine only. For remote management, you would need to implement a separate remote access solution.
 
 ### Q: What happens if Vivaldi updates while the service is running?
-**A**: This functionality will be implemented in issue #37 (Monitoring) and #38 (Auto-Healing). Currently, the service provides the foundation but doesn't actively monitor for updates.
+**A**: The service automatically detects Vivaldi updates and re-injects mods without user intervention:
+1. File System Monitor detects new version folder
+2. Auto-Heal Service waits for folder to stabilize (files accessible)
+3. Mods are automatically re-injected into the new version
+4. Process typically completes within seconds
+
+If auto-heal fails, it retries with exponential backoff. You can view heal history via the `GetHealHistory` IPC command.
 
 ### Q: How do I know if the service is working correctly?
 **A**: Use the GetHealthCheck command via IPC, or check the Windows Event Log for service activity.

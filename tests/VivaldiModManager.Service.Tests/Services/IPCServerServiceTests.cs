@@ -23,6 +23,8 @@ public class IPCServerServiceTests
     private readonly Mock<IVivaldiService> _vivaldiServiceMock;
     private readonly Mock<FileSystemMonitorService> _fileSystemMonitorServiceMock;
     private readonly Mock<IntegrityCheckService> _integrityCheckServiceMock;
+    private readonly Mock<AutoHealService> _autoHealServiceMock;
+    private readonly Mock<SafeModeManager> _safeModeManagerMock;
     private readonly ServiceConfiguration _config;
 
     public IPCServerServiceTests()
@@ -33,6 +35,7 @@ public class IPCServerServiceTests
         
         var monitorLogger = new Mock<ILogger<FileSystemMonitorService>>();
         var checkLogger = new Mock<ILogger<IntegrityCheckService>>();
+        
         var tempConfig = new ServiceConfiguration
         {
             ManifestPath = Path.Combine(Path.GetTempPath(), "test-manifest.json"),
@@ -41,9 +44,13 @@ public class IPCServerServiceTests
         };
         
         _fileSystemMonitorServiceMock = new Mock<FileSystemMonitorService>(
-            monitorLogger.Object, tempConfig, _manifestServiceMock.Object, _vivaldiServiceMock.Object);
+            MockBehavior.Loose,
+            monitorLogger.Object, tempConfig, _manifestServiceMock.Object, _vivaldiServiceMock.Object) { CallBase = false };
         _integrityCheckServiceMock = new Mock<IntegrityCheckService>(
-            checkLogger.Object, tempConfig, _manifestServiceMock.Object, _vivaldiServiceMock.Object);
+            MockBehavior.Loose,
+            checkLogger.Object, tempConfig, _manifestServiceMock.Object, _vivaldiServiceMock.Object) { CallBase = false };
+        _autoHealServiceMock = new Mock<AutoHealService>() { CallBase = false };
+        _safeModeManagerMock = new Mock<SafeModeManager>() { CallBase = false };
         
         _config = new ServiceConfiguration
         {
@@ -60,7 +67,8 @@ public class IPCServerServiceTests
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new IPCServerService(null!, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, 
-                _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object));
+                _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object, 
+                _autoHealServiceMock.Object, _safeModeManagerMock.Object));
     }
 
     [Fact]
@@ -69,7 +77,8 @@ public class IPCServerServiceTests
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new IPCServerService(_loggerMock.Object, null!, _manifestServiceMock.Object, _vivaldiServiceMock.Object,
-                _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object));
+                _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+                _autoHealServiceMock.Object, _safeModeManagerMock.Object));
     }
 
     [Fact]
@@ -78,7 +87,8 @@ public class IPCServerServiceTests
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new IPCServerService(_loggerMock.Object, _config, null!, _vivaldiServiceMock.Object,
-                _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object));
+                _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+                _autoHealServiceMock.Object, _safeModeManagerMock.Object));
     }
 
     [Fact]
@@ -87,7 +97,8 @@ public class IPCServerServiceTests
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, null!,
-                _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object));
+                _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+                _autoHealServiceMock.Object, _safeModeManagerMock.Object));
     }
 
     [Fact]
@@ -95,7 +106,8 @@ public class IPCServerServiceTests
     {
         // Act
         var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object,
-            _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object);
+            _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+            _autoHealServiceMock.Object, _safeModeManagerMock.Object);
 
         // Assert
         service.Should().NotBeNull();
@@ -106,7 +118,8 @@ public class IPCServerServiceTests
     {
         // Arrange
         var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object,
-            _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object);
+            _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+            _autoHealServiceMock.Object, _safeModeManagerMock.Object);
 
         // Act
         await service.StartAsync(CancellationToken.None);
@@ -126,12 +139,14 @@ public class IPCServerServiceTests
     public async Task StartAsync_WhenPipeAlreadyInUse_ThrowsInvalidOperationException()
     {
         // Arrange
-        var service1 = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object);
+        var service1 = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+            _autoHealServiceMock.Object, _safeModeManagerMock.Object);
         await service1.StartAsync(CancellationToken.None);
         await Task.Delay(100); // Give it time to start
 
         var loggerMock2 = new Mock<ILogger<IPCServerService>>();
-        var service2 = new IPCServerService(loggerMock2.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object);
+        var service2 = new IPCServerService(loggerMock2.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+            _autoHealServiceMock.Object, _safeModeManagerMock.Object);
 
         // Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(() => service2.StartAsync(CancellationToken.None));
@@ -146,7 +161,8 @@ public class IPCServerServiceTests
     public async Task StopAsync_StopsServiceGracefully()
     {
         // Arrange
-        var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object);
+        var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+            _autoHealServiceMock.Object, _safeModeManagerMock.Object);
         await service.StartAsync(CancellationToken.None);
         await Task.Delay(100);
 
@@ -164,7 +180,8 @@ public class IPCServerServiceTests
         _vivaldiServiceMock.Setup(v => v.DetectInstallationsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Core.Models.VivaldiInstallation>());
 
-        var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object);
+        var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+            _autoHealServiceMock.Object, _safeModeManagerMock.Object);
         await service.StartAsync(CancellationToken.None);
         await Task.Delay(200); // Give server time to start
 
@@ -196,7 +213,8 @@ public class IPCServerServiceTests
         _manifestServiceMock.Setup(m => m.ManifestExists(It.IsAny<string>()))
             .Returns(false);
 
-        var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object);
+        var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+            _autoHealServiceMock.Object, _safeModeManagerMock.Object);
         await service.StartAsync(CancellationToken.None);
         await Task.Delay(200);
 
@@ -226,7 +244,8 @@ public class IPCServerServiceTests
     public async Task PlaceholderCommands_ReturnNotImplemented()
     {
         // Arrange
-        var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object);
+        var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+            _autoHealServiceMock.Object, _safeModeManagerMock.Object);
         await service.StartAsync(CancellationToken.None);
         await Task.Delay(200);
 
@@ -259,7 +278,8 @@ public class IPCServerServiceTests
     public async Task InvalidMessage_ReturnsError()
     {
         // Arrange
-        var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object);
+        var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+            _autoHealServiceMock.Object, _safeModeManagerMock.Object);
         await service.StartAsync(CancellationToken.None);
         await Task.Delay(200);
 
@@ -283,7 +303,8 @@ public class IPCServerServiceTests
         _vivaldiServiceMock.Setup(v => v.DetectInstallationsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Core.Models.VivaldiInstallation>());
 
-        var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object);
+        var service = new IPCServerService(_loggerMock.Object, _config, _manifestServiceMock.Object, _vivaldiServiceMock.Object, _fileSystemMonitorServiceMock.Object, _integrityCheckServiceMock.Object,
+            _autoHealServiceMock.Object, _safeModeManagerMock.Object);
         await service.StartAsync(CancellationToken.None);
         await Task.Delay(200);
 

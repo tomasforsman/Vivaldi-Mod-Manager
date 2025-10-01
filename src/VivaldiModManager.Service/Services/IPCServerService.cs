@@ -24,6 +24,8 @@ public class IPCServerService : IHostedService, IDisposable
     private readonly IVivaldiService _vivaldiService;
     private readonly FileSystemMonitorService _fileSystemMonitorService;
     private readonly IntegrityCheckService _integrityCheckService;
+    private readonly AutoHealService _autoHealService;
+    private readonly SafeModeManager _safeModeManager;
     private readonly DateTimeOffset _startTime;
     private readonly List<Task> _clientTasks;
     private CancellationTokenSource? _cancellationTokenSource;
@@ -40,13 +42,17 @@ public class IPCServerService : IHostedService, IDisposable
     /// <param name="vivaldiService">The Vivaldi service.</param>
     /// <param name="fileSystemMonitorService">The file system monitor service.</param>
     /// <param name="integrityCheckService">The integrity check service.</param>
+    /// <param name="autoHealService">The auto-heal service.</param>
+    /// <param name="safeModeManager">The safe mode manager.</param>
     public IPCServerService(
         ILogger<IPCServerService> logger,
         ServiceConfiguration config,
         IManifestService manifestService,
         IVivaldiService vivaldiService,
         FileSystemMonitorService fileSystemMonitorService,
-        IntegrityCheckService integrityCheckService)
+        IntegrityCheckService integrityCheckService,
+        AutoHealService autoHealService,
+        SafeModeManager safeModeManager)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _config = config ?? throw new ArgumentNullException(nameof(config));
@@ -54,6 +60,8 @@ public class IPCServerService : IHostedService, IDisposable
         _vivaldiService = vivaldiService ?? throw new ArgumentNullException(nameof(vivaldiService));
         _fileSystemMonitorService = fileSystemMonitorService ?? throw new ArgumentNullException(nameof(fileSystemMonitorService));
         _integrityCheckService = integrityCheckService ?? throw new ArgumentNullException(nameof(integrityCheckService));
+        _autoHealService = autoHealService ?? throw new ArgumentNullException(nameof(autoHealService));
+        _safeModeManager = safeModeManager ?? throw new ArgumentNullException(nameof(safeModeManager));
         _startTime = DateTimeOffset.UtcNow;
         _clientTasks = new List<Task>();
     }
@@ -235,10 +243,19 @@ public class IPCServerService : IHostedService, IDisposable
                     return await HandleResumeMonitoringAsync(command).ConfigureAwait(false);
 
                 case IPCCommand.TriggerAutoHeal:
+                    return await HandleTriggerAutoHealAsync(command, cancellationToken).ConfigureAwait(false);
+
                 case IPCCommand.EnableSafeMode:
+                    return await HandleEnableSafeModeAsync(command, cancellationToken).ConfigureAwait(false);
+
                 case IPCCommand.DisableSafeMode:
+                    return await HandleDisableSafeModeAsync(command, cancellationToken).ConfigureAwait(false);
+
                 case IPCCommand.ReloadManifest:
-                    return CreateNotImplementedResponse(command, $"{command.Command} is not yet implemented. This will be available in future issues (#38).");
+                    return await HandleReloadManifestAsync(command, cancellationToken).ConfigureAwait(false);
+
+                case IPCCommand.GetHealHistory:
+                    return HandleGetHealHistory(command);
 
                 default:
                     return CreateErrorResponse(command, $"Unknown command: {command.Command}");
@@ -262,22 +279,28 @@ public class IPCServerService : IHostedService, IDisposable
             AutoHealEnabled = false,
             SafeModeActive = false,
             ManagedInstallations = 0,
-            LastOperation = null,
-            LastOperationTime = null,
-            TotalHealsAttempted = 0,
-            TotalHealsSucceeded = 0,
-            TotalHealsFailed = 0
+            LastOperation = _autoHealService.LastOperation,
+            LastOperationTime = _autoHealService.LastOperationTime,
+            TotalHealsAttempted = _autoHealService.TotalHealsAttempted,
+            TotalHealsSucceeded = _autoHealService.TotalHealsSucceeded,
+            TotalHealsFailed = _autoHealService.TotalHealsFailed
         };
 
-        // Try to get managed installations count
+        // Try to load manifest and get settings
         try
         {
-            var installations = await _vivaldiService.DetectInstallationsAsync(cancellationToken).ConfigureAwait(false);
-            status.ManagedInstallations = installations.Count;
+            if (_manifestService.ManifestExists(_config.ManifestPath))
+            {
+                var manifest = await _manifestService.LoadManifestAsync(_config.ManifestPath, cancellationToken);
+                status.MonitoringEnabled = manifest.Settings.MonitoringEnabled;
+                status.AutoHealEnabled = manifest.Settings.AutoHealEnabled;
+                status.SafeModeActive = manifest.Settings.SafeModeActive;
+                status.ManagedInstallations = manifest.Installations.Count;
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to detect Vivaldi installations for status");
+            _logger.LogWarning(ex, "Failed to load manifest for status");
         }
 
         return CreateSuccessResponse(command, status);
@@ -365,6 +388,128 @@ public class IPCServerService : IHostedService, IDisposable
         {
             _logger.LogError(ex, "Error resuming monitoring");
             return CreateErrorResponse(command, $"Error resuming monitoring: {ex.Message}");
+        }
+    }
+
+    private async Task<IPCResponseMessage> HandleTriggerAutoHealAsync(IPCCommandMessage command, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Handling TriggerAutoHeal command");
+
+        try
+        {
+            if (!_manifestService.ManifestExists(_config.ManifestPath))
+            {
+                return CreateErrorResponse(command, "Manifest not found");
+            }
+
+            var manifest = await _manifestService.LoadManifestAsync(_config.ManifestPath, cancellationToken);
+            
+            foreach (var installation in manifest.Installations)
+            {
+                _autoHealService.QueueHealRequest(installation.Id, "ManualTrigger");
+            }
+
+            var message = $"Heal requested for {manifest.Installations.Count} installation(s)";
+            return CreateSuccessResponse(command, new { message, count = manifest.Installations.Count });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error triggering auto-heal");
+            return CreateErrorResponse(command, $"Failed to trigger auto-heal: {ex.Message}");
+        }
+    }
+
+    private async Task<IPCResponseMessage> HandleEnableSafeModeAsync(IPCCommandMessage command, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Handling EnableSafeMode command");
+
+        try
+        {
+            var count = await _safeModeManager.ActivateAsync(cancellationToken);
+            var message = $"Safe Mode activated, processed {count} installation(s)";
+            return CreateSuccessResponse(command, new { message, count });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error enabling Safe Mode");
+            return CreateErrorResponse(command, $"Failed to enable Safe Mode: {ex.Message}");
+        }
+    }
+
+    private async Task<IPCResponseMessage> HandleDisableSafeModeAsync(IPCCommandMessage command, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Handling DisableSafeMode command");
+
+        try
+        {
+            var count = await _safeModeManager.DeactivateAsync(cancellationToken);
+            
+            // Queue heal requests for all installations
+            if (_manifestService.ManifestExists(_config.ManifestPath))
+            {
+                var manifest = await _manifestService.LoadManifestAsync(_config.ManifestPath, cancellationToken);
+                foreach (var installation in manifest.Installations)
+                {
+                    _autoHealService.QueueHealRequest(installation.Id, "SafeModeDisabled");
+                }
+            }
+
+            var message = $"Safe Mode deactivated, {count} heal request(s) queued";
+            return CreateSuccessResponse(command, new { message, count });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error disabling Safe Mode");
+            return CreateErrorResponse(command, $"Failed to disable Safe Mode: {ex.Message}");
+        }
+    }
+
+    private async Task<IPCResponseMessage> HandleReloadManifestAsync(IPCCommandMessage command, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Handling ReloadManifest command");
+
+        try
+        {
+            if (!_manifestService.ManifestExists(_config.ManifestPath))
+            {
+                return CreateErrorResponse(command, "Manifest not found");
+            }
+
+            var manifest = await _manifestService.LoadManifestAsync(_config.ManifestPath, cancellationToken);
+            
+            var message = "Manifest reloaded successfully";
+            return CreateSuccessResponse(command, new 
+            { 
+                message, 
+                monitoringEnabled = manifest.Settings.MonitoringEnabled,
+                autoHealEnabled = manifest.Settings.AutoHealEnabled,
+                safeModeActive = manifest.Settings.SafeModeActive
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reloading manifest");
+            return CreateErrorResponse(command, $"Failed to reload manifest: {ex.Message}");
+        }
+    }
+
+    private IPCResponseMessage HandleGetHealHistory(IPCCommandMessage command)
+    {
+        _logger.LogInformation("Handling GetHealHistory command");
+
+        try
+        {
+            // For now, just return all history (default 50)
+            // In the future, could parse Parameters for maxEntries
+            int maxEntries = 50;
+
+            var history = _autoHealService.GetHealHistory(maxEntries);
+            return CreateSuccessResponse(command, history);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting heal history");
+            return CreateErrorResponse(command, $"Failed to get heal history: {ex.Message}");
         }
     }
 

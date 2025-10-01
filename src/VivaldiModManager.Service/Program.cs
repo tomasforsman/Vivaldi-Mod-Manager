@@ -59,12 +59,18 @@ public class Program
                 services.AddSingleton<ILoaderService, LoaderService>();
                 services.AddSingleton<IHashService, HashService>();
 
+                // Register Safe Mode Manager
+                services.AddSingleton<SafeModeManager>();
+
                 // Register background services as both singleton and hosted service
                 services.AddSingleton<FileSystemMonitorService>();
                 services.AddHostedService(provider => provider.GetRequiredService<FileSystemMonitorService>());
 
                 services.AddSingleton<IntegrityCheckService>();
                 services.AddHostedService(provider => provider.GetRequiredService<IntegrityCheckService>());
+
+                services.AddSingleton<AutoHealService>();
+                services.AddHostedService(provider => provider.GetRequiredService<AutoHealService>());
 
                 // Register IPC server as both singleton and hosted service
                 services.AddSingleton<IPCServerService>();
